@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pulse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulsepassword
+      POSTGRES_DB: pulsedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pulse_pgdata:/var/lib/postgresql/data
+
+volumes:
+  pulse_pgdata:
