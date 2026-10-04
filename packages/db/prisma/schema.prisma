@@ -28,3 +28,18 @@ model ApiKey {
 
   @@index([key])
 }
+
+model TelegramIntegration {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chatId            String?
+  chatTitle         String?
+  verificationToken String   @unique
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([verificationToken])
+  @@index([projectId])
+}
