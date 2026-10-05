@@ -8,12 +8,15 @@ datasource db {
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  apiKeys   ApiKey[]
+  id                   String                @id @default(cuid())
+  name                 String
+  slug                 String                @unique
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  apiKeys              ApiKey[]
+  telegramIntegrations TelegramIntegration[]
+  errorEvents          ErrorEvent[]
+  incidents            Incident[]
 }
 
 model ApiKey {
@@ -42,4 +45,45 @@ model TelegramIntegration {
 
   @@index([verificationToken])
   @@index([projectId])
+}
+
+model Incident {
+  id              String       @id @default(cuid())
+  projectId       String
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fingerprint     String
+  title           String
+  status          String       @default("OPEN") // OPEN, RESOLVED, MUTED
+  severity        String       @default("CRITICAL") // CRITICAL, ERROR, WARNING
+  occurrenceCount Int          @default(1)
+  firstSeenAt     DateTime     @default(now())
+  lastSeenAt      DateTime     @default(now())
+  lastAlertedAt   DateTime     @default(now())
+  aiDiagnosis     String?      @db.Text
+  suggestedFix    String?      @db.Text
+  events          ErrorEvent[]
+
+  @@unique([projectId, fingerprint])
+  @@index([projectId, status])
+  @@index([lastSeenAt])
+}
+
+model ErrorEvent {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  incidentId  String?
+  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  fingerprint String
+  errorType   String // uncaughtException, unhandledRejection, middleware, custom
+  name        String
+  message     String    @db.Text
+  stack       String?   @db.Text
+  environment String    @default("production")
+  release     String?
+  metadata    Json?
+  timestamp   DateTime  @default(now())
+
+  @@index([projectId, timestamp])
+  @@index([fingerprint])
 }
