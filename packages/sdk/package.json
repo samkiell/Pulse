@@ -1,0 +1,32 @@
+{
+  "name": "pulse-monitor",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight crash alerting and error monitoring SDK for Node.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "tsx --test src/fingerprint.test.ts src/index.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "observability",
+    "error-tracking",
+    "crash-reporter",
+    "rumpty",
+    "pulse"
+  ],
+  "author": "SAMKIEL",
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.3.6",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.4"
+  }
+}
