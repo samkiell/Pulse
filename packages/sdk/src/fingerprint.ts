@@ -29,3 +29,5 @@ export function generateFingerprint(name: string, message: string, stack?: strin
   const signature = `${normalizedName}::${frames.join("|") || message.trim()}`;
   return createHash("sha256").update(signature).digest("hex").slice(0, 16);
 }
+
+// Optimized frame extraction
