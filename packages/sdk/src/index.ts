@@ -227,3 +227,5 @@ export const pulse = new PulseClient();
 export default pulse;
 export * from "./types";
 export * from "./fingerprint";
+
+// Configurable batch intervals
