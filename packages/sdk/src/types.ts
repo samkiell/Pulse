@@ -35,3 +35,5 @@ export interface IngestResponse {
   isNewIncident?: boolean;
   message?: string;
 }
+
+// Supported Express and Connect signatures
