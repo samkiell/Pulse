@@ -28,3 +28,5 @@ app.listen(config.port, () => {
 });
 
 export default app;
+
+// Health check endpoint active
