@@ -74,3 +74,5 @@ ingestRouter.post("/ingest", async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: "Internal error processing events." });
   }
 });
+
+// Authenticates bearer or header key
