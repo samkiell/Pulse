@@ -21,5 +21,3 @@ export const config = {
   // Ingestion settings
   alertDebounceWindowMinutes: parseInt(process.env.ALERT_DEBOUNCE_WINDOW_MINUTES || "5", 10),
 };
-
-// Ingest debounce config loaded
