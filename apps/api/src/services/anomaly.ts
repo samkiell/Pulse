@@ -202,3 +202,5 @@ async function triggerAlertWorkflow(
     console.error(`[Pulse Alert Worker] Failed for incident ${incidentId}:`, err);
   }
 }
+
+// Background dispatch worker attached
