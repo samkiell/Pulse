@@ -118,3 +118,5 @@ function generateFallbackDiagnosis(
     suggestedFix: `Inspect the stack frames near ${stack ? stack.split("\n")[1]?.trim() || "origin" : "origin"} and add guard clauses.`,
   };
 }
+
+// Heuristics for common exception types
