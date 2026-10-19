@@ -170,3 +170,5 @@ function escapeHtml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
+// HTML formatting and link integration
