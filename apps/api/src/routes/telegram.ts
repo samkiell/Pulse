@@ -15,3 +15,5 @@ telegramRouter.post("/webhook", async (req: Request, res: Response): Promise<voi
     res.status(200).send("OK"); // Acknowledge 200 so Telegram does not continually retry failed updates
   }
 });
+
+// Start command verification token handler
