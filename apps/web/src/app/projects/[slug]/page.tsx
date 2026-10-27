@@ -708,3 +708,5 @@ app.use(pulse.errorHandler());`}</pre>
     </div>
   );
 }
+
+// Simulator controls and handlers
