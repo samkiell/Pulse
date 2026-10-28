@@ -35,3 +35,4 @@ describe("SDK Fingerprint Generator", () => {
     assert.strictEqual(fp1, fp2);
   });
 });
+
