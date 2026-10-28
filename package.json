@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build",
-    "test": "pnpm --filter pulse-monitor test && pnpm --filter @pulse/api test",
+    "test": "pnpm --filter @samkiel/pulse-monitor test && pnpm --filter @pulse/api test",
     "db:generate": "pnpm --filter @pulse/db generate",
     "db:push": "pnpm --filter @pulse/db push"
   },

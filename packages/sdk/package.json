@@ -1,17 +1,41 @@
 {
-  "name": "pulse-monitor",
+  "name": "@samkiel/pulse-monitor",
   "version": "1.0.0",
   "description": "Ultra-lightweight crash alerting and error monitoring SDK for Node.js",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samkiell/Pulse.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/samkiell/Pulse#readme",
+  "bugs": {
+    "url": "https://github.com/samkiell/Pulse/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "test": "tsx --test src/fingerprint.test.ts src/index.test.ts",
+    "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -21,12 +45,12 @@
     "rumpty",
     "pulse"
   ],
-  "author": "SAMKIEL",
+  "author": "Samuel Ezekiel",
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^22.13.4",
     "tsup": "^8.3.6",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
-    "@types/node": "^22.13.4"
+    "typescript": "^5.7.3"
   }
 }
