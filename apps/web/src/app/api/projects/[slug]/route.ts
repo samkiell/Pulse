@@ -13,11 +13,19 @@ export async function GET(
       include: {
         apiKeys: {
           where: { isActive: true },
-          select: { id: true, key: true, name: true, lastUsedAt: true, createdAt: true },
+          select: { id: true, keyPrefix: true, name: true, lastUsedAt: true, createdAt: true },
         },
         telegramIntegrations: {
           where: { isActive: true },
-          select: { id: true, chatId: true, chatTitle: true, verificationToken: true, updatedAt: true },
+          select: {
+            id: true,
+            chatId: true,
+            chatTitle: true,
+            verificationToken: true,
+            createdAt: true,
+            consumedAt: true,
+            updatedAt: true,
+          },
         },
         incidents: {
           orderBy: { lastSeenAt: "desc" },
@@ -38,8 +46,25 @@ export async function GET(
     const openIncidentsCount = project.incidents.filter((i) => i.status === "OPEN").length;
     const totalOccurrences = project.incidents.reduce((acc, curr) => acc + curr.occurrenceCount, 0);
 
+    const botUsername =
+      process.env.TELEGRAM_BOT_USERNAME ||
+      process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
+      "PulseAlertBot";
+
+    const sanitizedProject = {
+      ...project,
+      apiKeys: project.apiKeys.map((k) => ({
+        ...k,
+        maskedKey: `${k.keyPrefix}••••••••••••••••••••••••`,
+      })),
+      telegramIntegrations: project.telegramIntegrations.map((t) => ({
+        ...t,
+        deepLink: `https://t.me/${botUsername}?start=${t.verificationToken}`,
+      })),
+    };
+
     return NextResponse.json({
-      project,
+      project: sanitizedProject,
       stats: {
         openIncidents: openIncidentsCount,
         resolvedIncidents: project.incidents.length - openIncidentsCount,

@@ -1,14 +1,31 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+
+function hashKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
 
 export async function GET() {
   try {
     const projects = await prisma.project.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        apiKeys: { where: { isActive: true }, select: { id: true, key: true, lastUsedAt: true } },
-        telegramIntegrations: { where: { isActive: true }, select: { id: true, chatId: true, chatTitle: true, verificationToken: true } },
+        apiKeys: {
+          where: { isActive: true },
+          select: { id: true, keyPrefix: true, lastUsedAt: true, createdAt: true, name: true },
+        },
+        telegramIntegrations: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            chatId: true,
+            chatTitle: true,
+            verificationToken: true,
+            createdAt: true,
+            consumedAt: true,
+          },
+        },
         _count: {
           select: {
             incidents: true,
@@ -18,7 +35,15 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(projects);
+    const sanitized = projects.map((project) => ({
+      ...project,
+      apiKeys: project.apiKeys.map((k) => ({
+        ...k,
+        maskedKey: `${k.keyPrefix}••••••••••••••••••••••••`,
+      })),
+    }));
+
+    return NextResponse.json(sanitized);
   } catch (error) {
     console.error("[API projects GET]", error);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
@@ -38,12 +63,13 @@ export async function POST(req: Request) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-    
-    // Ensure unique slug
+
     const randomSuffix = randomBytes(2).toString("hex");
     const slug = `${baseSlug}-${randomSuffix}`;
 
     const rawApiKey = `pulse_live_${randomBytes(16).toString("hex")}`;
+    const keyHash = hashKey(rawApiKey);
+    const keyPrefix = rawApiKey.slice(0, 12);
     const telegramToken = `plink_${randomBytes(8).toString("hex")}`;
 
     const project = await prisma.project.create({
@@ -52,7 +78,8 @@ export async function POST(req: Request) {
         slug,
         apiKeys: {
           create: {
-            key: rawApiKey,
+            keyHash,
+            keyPrefix,
             name: "Default API Key",
           },
         },
@@ -63,12 +90,27 @@ export async function POST(req: Request) {
         },
       },
       include: {
-        apiKeys: true,
+        apiKeys: {
+          select: { id: true, keyPrefix: true, lastUsedAt: true, createdAt: true, name: true },
+        },
         telegramIntegrations: true,
       },
     });
 
-    return NextResponse.json(project, { status: 201 });
+    const botUsername =
+      process.env.TELEGRAM_BOT_USERNAME ||
+      process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
+      "PulseAlertBot";
+    const telegramDeepLink = `https://t.me/${botUsername}?start=${telegramToken}`;
+
+    return NextResponse.json(
+      {
+        ...project,
+        apiKey: rawApiKey,
+        telegramDeepLink,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("[API projects POST]", error);
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });

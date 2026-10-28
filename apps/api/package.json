@@ -6,13 +6,17 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsup src/server.ts --format cjs --out-dir dist",
     "start": "node dist/server.js",
-    "test": "tsx --test src/services/ai.test.ts"
+    "test": "tsx --test src/services/ai.test.ts src/services/anomaly.test.ts",
+    "typecheck": "tsc --noEmit",
+    "telegram:set-webhook": "tsx src/scripts/set-webhook.ts"
   },
   "dependencies": {
     "@pulse/db": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "7.5.0",
+    "helmet": "8.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

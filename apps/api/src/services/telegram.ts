@@ -11,6 +11,7 @@ export interface AlertNotificationPayload {
   environment: string;
   aiDiagnosis?: string;
   suggestedFix?: string;
+  isRuleBased?: boolean;
 }
 
 /**
@@ -37,7 +38,8 @@ export async function sendTelegramAlert(
     return;
   }
 
-  const incidentUrl = `${config.dashboardUrl}/projects/${payload.projectSlug}/incidents/${payload.incidentId}`;
+  const incidentUrl = `${config.dashboardUrl}/projects/${payload.projectSlug}?incident=${payload.incidentId}`;
+  const aiHeading = payload.isRuleBased ? "Likely cause (rule-based):" : "AI root cause:";
 
   const messageText = `🚨 <b>Pulse Crash Alert</b>
 ━━━━━━━━━━━━━━━━━━
@@ -46,7 +48,7 @@ export async function sendTelegramAlert(
 📝 <b>Message:</b> <code>${escapeHtml(payload.errorMessage.slice(0, 250))}</code>
 🔢 <b>Occurrences:</b> ${payload.occurrenceCount}
 
-🧠 <b>AI Root-Cause Diagnosis:</b>
+🧠 <b>${aiHeading}</b>
 ${escapeHtml(payload.aiDiagnosis || "Diagnosis pending...")}
 
 💡 <b>Suggested Fix:</b>
@@ -57,7 +59,7 @@ ${escapeHtml(payload.aiDiagnosis || "Diagnosis pending...")}
   for (const integration of integrations) {
     if (!integration.chatId) continue;
     try {
-      await sendTelegramMessage(integration.chatId, messageText);
+      await sendTelegramMessage(integration.chatId, messageText, integration.id);
     } catch (err) {
       console.error(`[Telegram] Failed to send alert to chat ${integration.chatId}:`, err);
     }
@@ -69,20 +71,53 @@ ${escapeHtml(payload.aiDiagnosis || "Diagnosis pending...")}
  */
 export async function sendTelegramMessage(
   chatId: string | number,
-  text: string
+  text: string,
+  integrationId?: string
 ): Promise<void> {
-  const url = `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`;
-  
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: false,
-    }),
-  });
+  const base = (config.telegramApiBase || "https://api.telegram.org").replace(/\/$/, "");
+  const url = `${base}/bot${config.telegramBotToken}/sendMessage`;
+
+  // Truncate to Telegram's 4096 character limit
+  const truncatedText = text.length > 4096 ? text.slice(0, 4093) + "..." : text;
+
+  const makeRequest = async () => {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: truncatedText,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+  };
+
+  let response = await makeRequest();
+
+  // If rate limited (429), retry once after retry_after seconds
+  if (response.status === 429) {
+    try {
+      const data = (await response.json()) as any;
+      const retryAfter = data?.parameters?.retry_after || 1;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      response = await makeRequest();
+    } catch {
+      // Give up on retry failure
+      return;
+    }
+  }
+
+  // If bot was blocked (403), mark integration inactive
+  if (response.status === 403 && integrationId) {
+    await prisma.telegramIntegration
+      .update({
+        where: { id: integrationId },
+        data: { isActive: false },
+      })
+      .catch(() => {});
+    return;
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -94,7 +129,7 @@ export async function sendTelegramMessage(
  * Handles incoming webhook updates from Telegram
  */
 export async function handleTelegramUpdate(update: any): Promise<void> {
-  const message = update.message;
+  const message = update?.message;
   if (!message || !message.text) return;
 
   const chatId = String(message.chat.id);
@@ -108,7 +143,7 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
     if (!token) {
       await sendTelegramMessage(
         chatId,
-        `👋 <b>Welcome to Pulse Monitor!</b>\n\nTo link your Telegram to a project, open your Pulse Dashboard and click <b>Connect Telegram</b> to generate your unique link command.`
+        `Welcome to Pulse Monitor.\n\nTo link your chat to a project, open your Pulse Dashboard, click Connect Telegram to generate a link token, then send /start <token>.`
       );
       return;
     }
@@ -121,12 +156,30 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
     if (!integration) {
       await sendTelegramMessage(
         chatId,
-        `❌ <b>Invalid or Expired Token</b>\n\nPlease generate a new Telegram link token from your Pulse project settings.`
+        `Invalid token. Please generate a new link token from your Pulse dashboard.`
       );
       return;
     }
 
-    const chatTitle = message.chat.title || message.chat.username || message.chat.first_name || "Direct Chat";
+    if (integration.consumedAt) {
+      await sendTelegramMessage(
+        chatId,
+        `This token has already been used. Please generate a fresh link token from your Pulse dashboard.`
+      );
+      return;
+    }
+
+    const isExpired = Date.now() - new Date(integration.createdAt).getTime() > 24 * 60 * 60 * 1000;
+    if (isExpired) {
+      await sendTelegramMessage(
+        chatId,
+        `This token has expired. Link tokens are valid for 24 hours. Please generate a fresh link token from your Pulse dashboard.`
+      );
+      return;
+    }
+
+    const chatTitle =
+      message.chat.title || message.chat.username || message.chat.first_name || "Direct Chat";
 
     await prisma.telegramIntegration.update({
       where: { id: integration.id },
@@ -134,14 +187,15 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
         chatId,
         chatTitle,
         isActive: true,
+        consumedAt: new Date(),
       },
     });
 
     await sendTelegramMessage(
       chatId,
-      `✅ <b>Pulse Connected!</b>\n\nThis chat is now subscribed to alerts for project <b>${escapeHtml(
+      `Pulse Connected. This chat is now subscribed to alerts for project <b>${escapeHtml(
         integration.project.name
-      )}</b>.\n\nYou will receive instant crash notifications and AI root-cause summaries whenever an error is detected.`
+      )}</b>.`
     );
     return;
   }
@@ -154,12 +208,45 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
     });
 
     if (linked.length === 0) {
-      await sendTelegramMessage(chatId, `ℹ️ This chat is not currently linked to any active Pulse projects.`);
+      await sendTelegramMessage(
+        chatId,
+        `This chat is not currently linked to any active Pulse projects.`
+      );
       return;
     }
 
     const projectList = linked.map((item) => `• <b>${escapeHtml(item.project.name)}</b>`).join("\n");
-    await sendTelegramMessage(chatId, `📡 <b>Active Pulse Subscriptions:</b>\n\n${projectList}`);
+    await sendTelegramMessage(chatId, `Active Pulse Subscriptions:\n\n${projectList}`);
+    return;
+  }
+
+  // Handle /stop
+  if (text === "/stop") {
+    const result = await prisma.telegramIntegration.updateMany({
+      where: { chatId, isActive: true },
+      data: { isActive: false },
+    });
+
+    if (result.count > 0) {
+      await sendTelegramMessage(
+        chatId,
+        `Alerts stopped. ${result.count} project subscription(s) deactivated.`
+      );
+    } else {
+      await sendTelegramMessage(chatId, `No active project subscriptions found for this chat.`);
+    }
+    return;
+  }
+
+  // Handle /help
+  if (text === "/help") {
+    await sendTelegramMessage(
+      chatId,
+      `Pulse Bot Commands:
+/status - View active project subscriptions
+/stop - Stop receiving alerts for this chat
+/help - Show available commands`
+    );
     return;
   }
 }

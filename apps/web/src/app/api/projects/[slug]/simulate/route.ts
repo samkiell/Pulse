@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
+import { createHash, randomBytes } from "node:crypto";
+
+function hashKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  let ephemeralKeyId: string | null = null;
   try {
     const { slug } = await params;
     const body = await req.json().catch(() => ({}));
@@ -21,11 +27,21 @@ export async function POST(
       return NextResponse.json({ error: "Project or active API key not found" }, { status: 404 });
     }
 
-    const apiKey = project.apiKeys[0].key;
-    const apiPort = process.env.API_PORT || "4000";
-    const apiIngestUrl = process.env.INTERNAL_INGEST_URL || `http://localhost:${apiPort}/api/v1/ingest`;
+    const rawSimKey = `pulse_live_${randomBytes(16).toString("hex")}`;
+    const simKeyRecord = await prisma.apiKey.create({
+      data: {
+        projectId: project.id,
+        keyHash: hashKey(rawSimKey),
+        keyPrefix: rawSimKey.slice(0, 12),
+        name: "Simulator Ephemeral Key",
+      },
+    });
+    ephemeralKeyId = simKeyRecord.id;
 
-    // Simulated error payload
+    const apiPort = process.env.API_PORT || "4000";
+    const apiIngestUrl =
+      process.env.INTERNAL_INGEST_URL || `http://localhost:${apiPort}/api/v1/ingest`;
+
     const mockErrors: Record<string, any> = {
       uncaughtException: {
         name: "TypeError",
@@ -62,7 +78,7 @@ export async function POST(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Pulse-API-Key": apiKey,
+        "X-Pulse-API-Key": rawSimKey,
       },
       body: JSON.stringify({
         events: [
@@ -98,5 +114,9 @@ export async function POST(
   } catch (error: any) {
     console.error("[API simulate POST]", error);
     return NextResponse.json({ error: error.message || "Simulation failed" }, { status: 500 });
+  } finally {
+    if (ephemeralKeyId) {
+      await prisma.apiKey.delete({ where: { id: ephemeralKeyId } }).catch(() => {});
+    }
   }
 }
