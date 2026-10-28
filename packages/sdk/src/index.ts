@@ -137,7 +137,7 @@ export class PulseClient {
         );
       }
 
-      if (this.queue.length >= cap || errorType === "uncaughtException") {
+      if (errorType === "uncaughtException") {
         void this.flush();
       }
     } catch (error) {
