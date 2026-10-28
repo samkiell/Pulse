@@ -3,19 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Activity,
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Copy,
   ExternalLink,
   FolderGit2,
-  Key,
-  MessageSquare,
   Plus,
   RefreshCw,
-  Send,
-  ShieldAlert,
+  X,
 } from "lucide-react";
 
 interface Project {
@@ -23,8 +19,18 @@ interface Project {
   name: string;
   slug: string;
   createdAt: string;
-  apiKeys: { id: string; key: string; lastUsedAt: string | null }[];
-  telegramIntegrations: { id: string; chatId: string | null; chatTitle: string | null; verificationToken: string }[];
+  apiKeys: {
+    id: string;
+    keyPrefix: string;
+    maskedKey?: string;
+    lastUsedAt: string | null;
+  }[];
+  telegramIntegrations: {
+    id: string;
+    chatId: string | null;
+    chatTitle: string | null;
+    verificationToken: string;
+  }[];
   _count: {
     incidents: number;
     errorEvents: number;
@@ -38,6 +44,12 @@ export default function ProjectsPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [creating, setCreating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [createdProjectKey, setCreatedProjectKey] = useState<{
+    name: string;
+    slug: string;
+    apiKey: string;
+    telegramDeepLink?: string;
+  } | null>(null);
 
   const fetchProjects = async () => {
     try {
@@ -71,8 +83,15 @@ export default function ProjectsPage() {
       });
 
       if (res.ok) {
+        const json = await res.json();
         setNewProjectName("");
         setIsModalOpen(false);
+        setCreatedProjectKey({
+          name: json.name,
+          slug: json.slug,
+          apiKey: json.apiKey,
+          telegramDeepLink: json.telegramDeepLink,
+        });
         fetchProjects();
       }
     } catch (err) {
@@ -122,38 +141,33 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Projects Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Grid of Projects */}
+      {loading && projects.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-52 rounded-xl bg-[#18181b]/50 border border-[#27272a] animate-pulse"
-            />
+            <div key={i} className="h-48 rounded-xl bg-[#18181b] border border-[#27272a]" />
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[#27272a] bg-[#18181b]/20">
-          <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-4">
-            <Activity className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-semibold text-white">No services monitored yet</h3>
-          <p className="text-sm text-[#71717a] max-w-sm mx-auto mt-1 mb-6">
-            Connect your first Rumpty Cloud app in under 5 minutes to receive instant crash notifications with AI diagnosis.
+        <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[#27272a] bg-[#121215]">
+          <FolderGit2 className="w-12 h-12 text-[#71717a] mx-auto mb-3 opacity-60" />
+          <h3 className="text-base font-semibold text-white">No Monitored Services Yet</h3>
+          <p className="text-xs text-[#a1a1aa] max-w-sm mx-auto mt-1 mb-6">
+            Get started by registering a service to receive crash notifications and AI incident diagnoses.
           </p>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Create First Project</span>
+            <span>Register Your First Service</span>
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => {
             const hasTelegram = project.telegramIntegrations.some((t) => t.chatId !== null);
-            const apiKey = project.apiKeys[0]?.key || "";
+            const activeKey = project.apiKeys[0]?.maskedKey || "No active key";
 
             return (
               <div
@@ -218,28 +232,12 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  {/* API Key Snippet */}
+                  {/* API Key Display */}
                   <div className="mt-3">
                     <span className="text-[11px] text-[#71717a] font-mono block mb-1">API Key:</span>
                     <div className="flex items-center justify-between bg-[#18181b] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[#a1a1aa]">
-                      <span className="truncate">
-                        {apiKey ? `${apiKey.slice(0, 14)}••••••••` : "No active key"}
-                      </span>
-                      {apiKey && (
-                        <button
-                          onClick={() => copyToClipboard(apiKey, project.id)}
-                          className="hover:text-white transition-colors ml-2"
-                          title="Copy API Key"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <span className="truncate">{activeKey}</span>
                     </div>
-                    {copiedKey === project.id && (
-                      <span className="text-[10px] text-emerald-400 font-mono mt-1 block">
-                        Copied to clipboard!
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -261,13 +259,85 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* Creation Success Modal with Full API Key (Shown Once) */}
+      {createdProjectKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-[#121215] border border-[#27272a] rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  Service Created: {createdProjectKey.name}
+                </h3>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  Copy your API key now. For security, this key is hashed and will not be displayed again.
+                </p>
+              </div>
+              <button
+                onClick={() => setCreatedProjectKey(null)}
+                className="text-[#71717a] hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block">
+                API Key (Shown Once)
+              </span>
+              <div className="flex items-center justify-between bg-[#18181b] border border-emerald-500/30 rounded-lg p-3 font-mono text-xs text-white break-all">
+                <span>{createdProjectKey.apiKey}</span>
+                <button
+                  onClick={() => copyToClipboard(createdProjectKey.apiKey, "created-key")}
+                  className="ml-2 hover:text-emerald-400 text-[#a1a1aa] transition-colors shrink-0"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+              {copiedKey === "created-key" && (
+                <span className="text-[11px] text-emerald-400 font-mono block">
+                  Copied to clipboard.
+                </span>
+              )}
+            </div>
+
+            {createdProjectKey.telegramDeepLink && (
+              <div className="pt-2">
+                <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block mb-1.5">
+                  Telegram Alert Link
+                </span>
+                <a
+                  href={createdProjectKey.telegramDeepLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Connect Telegram Bot</span>
+                </a>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t border-[#27272a]">
+              <Link
+                href={`/projects/${createdProjectKey.slug}`}
+                onClick={() => setCreatedProjectKey(null)}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
+              >
+                Go to Project Dashboard →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Project Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="w-full max-w-md bg-[#121215] border border-[#27272a] rounded-2xl p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white mb-1">Connect New Service</h3>
             <p className="text-xs text-[#a1a1aa] mb-4">
-              Enter the name of your service (e.g. "payment-api", "auth-worker") to generate an API key and Telegram connection token.
+              Enter the name of your service to generate an API key and Telegram connection token.
             </p>
 
             <form onSubmit={handleCreateProject} className="space-y-4">

@@ -1,27 +1,23 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
-  Activity,
   AlertOctagon,
   AlertTriangle,
   ArrowLeft,
   Bot,
   CheckCircle2,
-  Code2,
   Copy,
   ExternalLink,
   Flame,
-  Key,
-  Layers,
-  MessageSquare,
   Play,
   RefreshCw,
-  Send,
   Terminal,
   X,
-  Zap,
+  Sparkles,
+  HelpCircle,
 } from "lucide-react";
 import { formatTimeAgo } from "@/lib/utils";
 
@@ -46,6 +42,7 @@ interface Incident {
   lastSeenAt: string;
   aiDiagnosis: string | null;
   suggestedFix: string | null;
+  diagnosisSource?: string | null;
   events: ErrorEvent[];
 }
 
@@ -55,8 +52,20 @@ interface ProjectData {
     name: string;
     slug: string;
     createdAt: string;
-    apiKeys: { id: string; key: string; name: string; lastUsedAt: string | null }[];
-    telegramIntegrations: { id: string; chatId: string | null; chatTitle: string | null; verificationToken: string }[];
+    apiKeys: {
+      id: string;
+      keyPrefix: string;
+      maskedKey?: string;
+      name: string;
+      lastUsedAt: string | null;
+    }[];
+    telegramIntegrations: {
+      id: string;
+      chatId: string | null;
+      chatTitle: string | null;
+      verificationToken: string;
+      deepLink?: string;
+    }[];
     incidents: Incident[];
   };
   stats: {
@@ -66,21 +75,21 @@ interface ProjectData {
   };
 }
 
-export default function ProjectDetailsPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const resolvedParams = use(params);
-  const slug = resolvedParams.slug;
+function ProjectDetailsContent({ slug }: { slug: string }) {
+  const searchParams = useSearchParams();
+  const incidentQueryParam = searchParams.get("incident");
 
   const [data, setData] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"incidents" | "sdk" | "telegram" | "simulate">("incidents");
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [unknownIncidentId, setUnknownIncidentId] = useState<string | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [simMessage, setSimMessage] = useState<string | null>(null);
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null);
+  const [rotatingKey, setRotatingKey] = useState(false);
+  const [generatingTgToken, setGeneratingTgToken] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -89,7 +98,7 @@ export default function ProjectDetailsPage({
       if (res.ok) {
         const json = await res.json();
         setData(json);
-        // Refresh selected incident if open
+
         if (selectedIncident) {
           const fresh = json.project.incidents.find((i: Incident) => i.id === selectedIncident.id);
           if (fresh) setSelectedIncident(fresh);
@@ -106,19 +115,32 @@ export default function ProjectDetailsPage({
     fetchData();
   }, [slug]);
 
+  // Handle deep link from Telegram alert (?incident=<id>)
+  useEffect(() => {
+    if (data && incidentQueryParam) {
+      const match = data.project.incidents.find((i) => i.id === incidentQueryParam);
+      if (match) {
+        setSelectedIncident(match);
+        setUnknownIncidentId(null);
+      } else {
+        setUnknownIncidentId(incidentQueryParam);
+      }
+    }
+  }, [data, incidentQueryParam]);
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(id);
-    setTimeout(() => setCopiedText(null), 2000);
+    setTimeout(() => setCopiedText(null), 2500);
   };
 
   const toggleIncidentStatus = async (incident: Incident) => {
-    const newStatus = incident.status === "OPEN" ? "RESOLVED" : "OPEN";
+    const nextStatus = incident.status === "OPEN" ? "RESOLVED" : "OPEN";
     try {
       const res = await fetch(`/api/projects/${slug}/incidents/${incident.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: nextStatus }),
       });
       if (res.ok) {
         fetchData();
@@ -128,24 +150,57 @@ export default function ProjectDetailsPage({
     }
   };
 
-  const handleSimulateError = async (type: string) => {
+  const handleRotateKey = async () => {
+    if (!confirm("Rotate API Key? The previous active key will be immediately revoked.")) {
+      return;
+    }
+    try {
+      setRotatingKey(true);
+      const res = await fetch(`/api/projects/${slug}/keys`, { method: "POST" });
+      if (res.ok) {
+        const json = await res.json();
+        setRotatedKey(json.key);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Failed to rotate key", err);
+    } finally {
+      setRotatingKey(false);
+    }
+  };
+
+  const handleGenerateTgToken = async () => {
+    try {
+      setGeneratingTgToken(true);
+      const res = await fetch(`/api/projects/${slug}/telegram`, { method: "POST" });
+      if (res.ok) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error("Failed to generate Telegram token", err);
+    } finally {
+      setGeneratingTgToken(false);
+    }
+  };
+
+  const runSimulation = async (errorType: string) => {
     try {
       setSimulating(true);
-      setSimMessage(null);
+      setSimMessage("Dispatching simulated crash to API ingest...");
       const res = await fetch(`/api/projects/${slug}/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ errorType: type }),
+        body: JSON.stringify({ errorType }),
       });
-      const result = await res.json();
+      const json = await res.json();
       if (res.ok) {
-        setSimMessage(`Simulated error dispatched! Incident created/updated.`);
-        setTimeout(() => fetchData(), 500);
+        setSimMessage(`Success: Simulated crash ingested (${json.simulatedError})`);
+        setTimeout(() => fetchData(), 1200);
       } else {
-        setSimMessage(`Error: ${result.error || "Simulation failed"}`);
+        setSimMessage(`Simulation failed: ${json.error}`);
       }
     } catch (err: any) {
-      setSimMessage(`Simulation failed: ${err.message}`);
+      setSimMessage(`Network error: ${err.message}`);
     } finally {
       setSimulating(false);
     }
@@ -172,12 +227,31 @@ export default function ProjectDetailsPage({
   }
 
   const project = data.project;
-  const apiKey = project.apiKeys[0]?.key || "";
+  const activeKeyDisplay =
+    rotatedKey || project.apiKeys[0]?.maskedKey || "pulse_live_••••••••••••••••••••••••";
   const telegram = project.telegramIntegrations[0];
   const isTelegramConnected = Boolean(telegram?.chatId);
 
   return (
     <div className="space-y-6">
+      {/* Unknown deep-linked incident banner */}
+      {unknownIncidentId && (
+        <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              Incident <code>{unknownIncidentId}</code> was not found in this project. It may have been pruned or belong to another project.
+            </span>
+          </div>
+          <button
+            onClick={() => setUnknownIncidentId(null)}
+            className="text-amber-400 hover:text-white ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-[#27272a] pb-6">
         <div>
@@ -254,7 +328,7 @@ export default function ProjectDetailsPage({
           }`}
         >
           <div className="flex items-center gap-2">
-            <Code2 className="w-4 h-4" />
+            <Terminal className="w-4 h-4" />
             <span>SDK Integration</span>
           </div>
           {activeTab === "sdk" && (
@@ -271,12 +345,12 @@ export default function ProjectDetailsPage({
           }`}
         >
           <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
+            <Bot className="w-4 h-4" />
             <span>Telegram Bot</span>
             {isTelegramConnected ? (
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
             ) : (
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
             )}
           </div>
           {activeTab === "telegram" && (
@@ -293,7 +367,7 @@ export default function ProjectDetailsPage({
           }`}
         >
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Flame className="w-4 h-4 text-amber-400" />
             <span>Crash Simulator</span>
           </div>
           {activeTab === "simulate" && (
@@ -306,85 +380,81 @@ export default function ProjectDetailsPage({
       {activeTab === "incidents" && (
         <div className="space-y-4">
           {project.incidents.length === 0 ? (
-            <div className="text-center py-16 rounded-xl border border-[#27272a] bg-[#121215]">
-              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-white">No Incidents Recorded</h3>
-              <p className="text-xs text-[#71717a] max-w-sm mx-auto mt-1 mb-4">
-                Your application has not reported any crashes yet, or you can trigger a test crash using the simulator.
+            <div className="p-12 text-center rounded-xl border border-[#27272a] bg-[#121215]">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3 opacity-90" />
+              <h3 className="text-base font-semibold text-white">No Incidents Reported</h3>
+              <p className="text-xs text-[#a1a1aa] mt-1 max-w-sm mx-auto">
+                No crashes have been captured yet. Use the Simulator tab to test alerting workflows.
               </p>
-              <button
-                onClick={() => setActiveTab("simulate")}
-                className="px-4 py-2 rounded-lg bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-white text-xs font-medium transition-colors"
-              >
-                Launch Crash Simulator
-              </button>
             </div>
           ) : (
-            <div className="divide-y divide-[#27272a] border border-[#27272a] rounded-xl bg-[#121215] overflow-hidden">
+            <div className="rounded-xl border border-[#27272a] bg-[#121215] divide-y divide-[#1f1f23] overflow-hidden">
               {project.incidents.map((incident) => {
                 const isOpen = incident.status === "OPEN";
                 return (
                   <div
                     key={incident.id}
                     onClick={() => setSelectedIncident(incident)}
-                    className="p-4 sm:p-5 hover:bg-[#18181b]/50 cursor-pointer transition-colors flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+                    className="p-4 hover:bg-[#18181b]/60 transition-colors cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                   >
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${
-                            isOpen
-                              ? "bg-red-500/10 text-red-400 border border-red-500/30"
-                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                          }`}
-                        >
-                          {incident.status}
-                        </span>
-
-                        <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#27272a] text-[#a1a1aa]">
-                          {incident.severity}
-                        </span>
-
-                        <span className="text-xs text-[#71717a] font-mono">
-                          Last seen {formatTimeAgo(incident.lastSeenAt)}
-                        </span>
-                      </div>
-
-                      <h2 className="text-sm font-semibold text-white truncate hover:text-red-400 transition-colors">
-                        {incident.title}
-                      </h2>
-
-                      {incident.aiDiagnosis && (
-                        <p className="text-xs text-[#a1a1aa] line-clamp-1 flex items-center gap-1.5">
-                          <span className="text-[10px] uppercase font-mono px-1 py-0.2 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                            AI Diagnosis
-                          </span>
-                          {incident.aiDiagnosis}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4 self-end md:self-center shrink-0">
-                      <div className="text-right">
-                        <span className="text-xs font-mono text-[#71717a] block">Occurrences</span>
-                        <span className="text-sm font-bold text-white font-mono">
-                          {incident.occurrenceCount}x
-                        </span>
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleIncidentStatus(incident);
-                        }}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${
+                    <div className="flex items-start gap-3.5">
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
                           isOpen
-                            ? "bg-[#18181b] hover:bg-[#27272a] border-[#27272a] text-emerald-400"
-                            : "bg-[#18181b] hover:bg-[#27272a] border-[#27272a] text-[#a1a1aa]"
+                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                         }`}
                       >
-                        {isOpen ? "Mark Resolved" : "Reopen"}
-                      </button>
+                        <AlertOctagon className="w-4 h-4" />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded ${
+                              isOpen
+                                ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            }`}
+                          >
+                            {incident.status}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#18181b] text-[#a1a1aa] border border-[#27272a]">
+                            {incident.severity}
+                          </span>
+                          {incident.diagnosisSource && (
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                incident.diagnosisSource === "heuristic"
+                                  ? "bg-zinc-800 text-zinc-300 border-zinc-700"
+                                  : "bg-purple-950/40 text-purple-300 border-purple-800"
+                              }`}
+                            >
+                              {incident.diagnosisSource === "heuristic" ? "Rule-based" : "AI"}
+                            </span>
+                          )}
+                          <span className="text-xs text-[#71717a]">
+                            Last seen {formatTimeAgo(incident.lastSeenAt)}
+                          </span>
+                        </div>
+
+                        <h4 className="text-sm font-semibold text-white hover:text-red-400 transition-colors line-clamp-1">
+                          {incident.title}
+                        </h4>
+
+                        <p className="text-xs text-[#a1a1aa] line-clamp-1 mt-0.5">
+                          {incident.aiDiagnosis || "Diagnosis pending..."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 self-end sm:self-center">
+                      <div className="text-right">
+                        <span className="text-xs font-mono text-[#71717a] block">Occurrences</span>
+                        <span className="text-sm font-bold font-mono text-white">
+                          {incident.occurrenceCount}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -394,15 +464,70 @@ export default function ProjectDetailsPage({
         </div>
       )}
 
-      {/* Tab Content: SDK Integration */}
+      {/* Tab Content: SDK Quickstart */}
       {activeTab === "sdk" && (
         <div className="space-y-6">
-          <div className="p-6 rounded-xl border border-[#27272a] bg-[#121215] space-y-5">
-            <div>
-              <h3 className="text-base font-semibold text-white">SDK Quickstart</h3>
-              <p className="text-xs text-[#a1a1aa] mt-1">
-                Drop `pulse-monitor` into your Node.js application deployed on Rumpty Cloud.
-              </p>
+          <div className="p-6 rounded-xl border border-[#27272a] bg-[#121215] space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">SDK Quickstart</h3>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  Add <code>@samkiel/pulse-monitor</code> to your Node.js application deployed on Rumpty Cloud.
+                </p>
+              </div>
+
+              <button
+                onClick={handleRotateKey}
+                disabled={rotatingKey}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-xs font-medium text-white transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${rotatingKey ? "animate-spin" : ""}`} />
+                <span>Rotate API Key</span>
+              </button>
+            </div>
+
+            {/* Rotated Key One-Time Display Banner */}
+            {rotatedKey && (
+              <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    New API Key Generated (shown once):
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(rotatedKey, "rotated-key")}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedText === "rotated-key" ? "Copied!" : "Copy Key"}</span>
+                  </button>
+                </div>
+                <div className="p-2 bg-[#18181b] rounded border border-[#27272a] text-white break-all select-all font-mono">
+                  {rotatedKey}
+                </div>
+                <span className="text-[#a1a1aa] block text-[11px]">
+                  Store this key securely. It cannot be displayed again after you leave this page.
+                </span>
+              </div>
+            )}
+
+            {/* Active Key Display */}
+            <div className="flex items-center justify-between p-3 bg-[#18181b] border border-[#27272a] rounded-lg">
+              <div>
+                <span className="text-[11px] font-mono text-[#71717a] uppercase tracking-wider block">
+                  Active API Key
+                </span>
+                <span className="text-xs font-mono text-[#e4e4e7]">{activeKeyDisplay}</span>
+              </div>
+              {rotatedKey && (
+                <button
+                  onClick={() => copyToClipboard(rotatedKey, "active-key")}
+                  className="hover:text-red-400 text-[#a1a1aa] transition-colors p-1"
+                  title="Copy Key"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {/* Step 1 */}
@@ -411,9 +536,9 @@ export default function ProjectDetailsPage({
                 1. Install SDK
               </span>
               <div className="flex items-center justify-between bg-[#18181b] border border-[#27272a] rounded-lg p-3 font-mono text-xs text-white">
-                <code>npm install pulse-monitor</code>
+                <code>npm install @samkiel/pulse-monitor</code>
                 <button
-                  onClick={() => copyToClipboard("npm install pulse-monitor", "install")}
+                  onClick={() => copyToClipboard("npm install @samkiel/pulse-monitor", "install")}
                   className="hover:text-red-400 transition-colors"
                 >
                   <Copy className="w-4 h-4" />
@@ -430,7 +555,7 @@ export default function ProjectDetailsPage({
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      `import pulse from "pulse-monitor";\n\npulse.init({\n  apiKey: "${apiKey}",\n  endpoint: "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ingest"\n});`,
+                      `import pulse from "@samkiel/pulse-monitor";\n\npulse.init({\n  apiKey: "${activeKeyDisplay}",\n  endpoint: "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ingest",\n  environment: process.env.NODE_ENV || "production"\n});`,
                       "code-init"
                     )
                   }
@@ -438,11 +563,11 @@ export default function ProjectDetailsPage({
                 >
                   <Copy className="w-4 h-4" />
                 </button>
-                <pre>{`import pulse from "pulse-monitor";
+                <pre>{`import pulse from "@samkiel/pulse-monitor";
 
 // Initialize at the very top of your entrypoint
 pulse.init({
-  apiKey: "${apiKey}",
+  apiKey: "${activeKeyDisplay}",
   endpoint: "${typeof window !== "undefined" ? window.location.origin : ""}/api/v1/ingest",
   environment: process.env.NODE_ENV || "production"
 });`}</pre>
@@ -452,7 +577,7 @@ pulse.init({
             {/* Step 3 */}
             <div>
               <span className="text-xs font-mono uppercase text-[#71717a] tracking-wider block mb-2">
-                3. Attach Express / Fastify Error Middleware (Optional)
+                3. Attach Express Error Middleware (Optional)
               </span>
               <div className="relative bg-[#18181b] border border-[#27272a] rounded-lg p-4 font-mono text-xs text-[#e4e4e7] overflow-x-auto">
                 <pre>{`// In Express: attach at the end of routes
@@ -467,7 +592,7 @@ app.use(pulse.errorHandler());`}</pre>
       {activeTab === "telegram" && (
         <div className="space-y-6">
           <div className="p-6 rounded-xl border border-[#27272a] bg-[#121215] space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
                   <Bot className="w-5 h-5 text-red-400" />
@@ -478,7 +603,7 @@ app.use(pulse.errorHandler());`}</pre>
                 </p>
               </div>
 
-              <div>
+              <div className="flex items-center gap-3">
                 {isTelegramConnected ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">
                     <CheckCircle2 className="w-4 h-4" />
@@ -490,6 +615,15 @@ app.use(pulse.errorHandler());`}</pre>
                     Pending Verification
                   </span>
                 )}
+
+                <button
+                  onClick={handleGenerateTgToken}
+                  disabled={generatingTgToken}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-xs font-medium text-white transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${generatingTgToken ? "animate-spin" : ""}`} />
+                  <span>New Link Token</span>
+                </button>
               </div>
             </div>
 
@@ -499,10 +633,21 @@ app.use(pulse.errorHandler());`}</pre>
               </span>
               <ol className="text-xs text-[#d4d4d8] space-y-3 list-decimal list-inside">
                 <li>
-                  Open Telegram and search for <strong>@PulseMonitorBot</strong> (or open link).
+                  Open the Telegram link or search for the bot:
+                  <div className="mt-2 flex items-center gap-3">
+                    <a
+                      href={telegram?.deepLink || `https://t.me/PulseAlertBot?start=${telegram?.verificationToken}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open Bot in Telegram</span>
+                    </a>
+                  </div>
                 </li>
                 <li>
-                  Send this one-time command to link this project:
+                  Or send this command directly to the bot:
                   <div className="mt-2 flex items-center justify-between bg-[#121215] border border-[#27272a] rounded-lg p-3 font-mono text-xs text-white">
                     <code>/start {telegram?.verificationToken}</code>
                     <button
@@ -516,7 +661,7 @@ app.use(pulse.errorHandler());`}</pre>
                   </div>
                 </li>
                 <li>
-                  The bot will reply with a confirmation message, and runtime alerts will start flowing immediately!
+                  Tokens are valid for 24 hours and single use. The bot will acknowledge connection upon receipt.
                 </li>
               </ol>
             </div>
@@ -548,52 +693,46 @@ app.use(pulse.errorHandler());`}</pre>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
               <button
                 disabled={simulating}
-                onClick={() => handleSimulateError("uncaughtException")}
-                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-red-500/50 hover:bg-[#18181b]/80 transition-all text-left group"
+                onClick={() => runSimulation("uncaughtException")}
+                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-red-500/40 hover:bg-red-500/5 text-left transition-all group"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-red-400 font-semibold uppercase">
-                    Uncaught Exception
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-red-400" />
+                  <span className="text-xs font-mono text-red-400 font-semibold">01. Exception</span>
+                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-red-400 transition-colors" />
                 </div>
-                <h4 className="text-sm font-bold text-white mb-1">TypeError: null pointer</h4>
-                <p className="text-[11px] text-[#71717a]">
-                  Triggers immediate AI diagnosis and instant Telegram push notification.
+                <h4 className="text-sm font-semibold text-white mb-1">Uncaught Exception</h4>
+                <p className="text-[11px] text-[#71717a] leading-relaxed">
+                  Null pointer dereference triggering an immediate incident and push alert.
                 </p>
               </button>
 
               <button
                 disabled={simulating}
-                onClick={() => handleSimulateError("unhandledRejection")}
-                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-amber-500/50 hover:bg-[#18181b]/80 transition-all text-left group"
+                onClick={() => runSimulation("unhandledRejection")}
+                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-amber-500/40 hover:bg-amber-500/5 text-left transition-all group"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-amber-400 font-semibold uppercase">
-                    Unhandled Rejection
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-amber-400" />
+                  <span className="text-xs font-mono text-amber-400 font-semibold">02. Promise Rejection</span>
+                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-amber-400 transition-colors" />
                 </div>
-                <h4 className="text-sm font-bold text-white mb-1">DB Connection Timeout</h4>
-                <p className="text-[11px] text-[#71717a]">
-                  Simulates managed database outage or network unreachable on Rumpty.
+                <h4 className="text-sm font-semibold text-white mb-1">Unhandled Rejection</h4>
+                <p className="text-[11px] text-[#71717a] leading-relaxed">
+                  Asynchronous database TCP timeout.
                 </p>
               </button>
 
               <button
                 disabled={simulating}
-                onClick={() => handleSimulateError("crashLoop")}
-                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-purple-500/50 hover:bg-[#18181b]/80 transition-all text-left group"
+                onClick={() => runSimulation("crashLoop")}
+                className="p-4 rounded-xl border border-[#27272a] bg-[#18181b] hover:border-purple-500/40 hover:bg-purple-500/5 text-left transition-all group"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-purple-400 font-semibold uppercase">
-                    Crash Loop / OOM
-                  </span>
-                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-purple-400" />
+                  <span className="text-xs font-mono text-purple-400 font-semibold">03. OOM Fatal</span>
+                  <Play className="w-3.5 h-3.5 text-[#71717a] group-hover:text-purple-400 transition-colors" />
                 </div>
-                <h4 className="text-sm font-bold text-white mb-1">Heap Out of Memory</h4>
-                <p className="text-[11px] text-[#71717a]">
-                  Tests sliding-window deduplication so repeated crashes don't spam.
+                <h4 className="text-sm font-semibold text-white mb-1">Out of Memory Crash</h4>
+                <p className="text-[11px] text-[#71717a] leading-relaxed">
+                  V8 fatal heap exhaustion event.
                 </p>
               </button>
             </div>
@@ -621,6 +760,15 @@ app.use(pulse.errorHandler());`}</pre>
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#27272a] text-[#a1a1aa]">
                     {selectedIncident.severity}
                   </span>
+                  <span
+                    className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                      selectedIncident.diagnosisSource === "heuristic"
+                        ? "bg-zinc-800 text-zinc-300 border-zinc-700"
+                        : "bg-purple-950/40 text-purple-300 border-purple-800"
+                    }`}
+                  >
+                    {selectedIncident.diagnosisSource === "heuristic" ? "Rule-based" : "AI"}
+                  </span>
                   <span className="text-xs font-mono text-[#71717a]">
                     First seen {formatTimeAgo(selectedIncident.firstSeenAt)} • {selectedIncident.occurrenceCount} occurrences
                   </span>
@@ -638,24 +786,42 @@ app.use(pulse.errorHandler());`}</pre>
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-6">
-              {/* AI Diagnosis Card */}
-              <div className="p-5 rounded-xl border border-purple-500/30 bg-purple-950/10 shadow-lg shadow-purple-500/5 space-y-3">
-                <div className="flex items-center gap-2 text-purple-400">
-                  <Bot className="w-5 h-5" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider">
-                    Rumpty AI Root-Cause Diagnosis
+              {/* Diagnosis Card */}
+              <div
+                className={`p-5 rounded-xl border shadow-lg space-y-3 ${
+                  selectedIncident.diagnosisSource === "heuristic"
+                    ? "border-zinc-700 bg-zinc-900/30 shadow-zinc-900/10"
+                    : "border-purple-500/30 bg-purple-950/10 shadow-purple-500/5"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {selectedIncident.diagnosisSource === "heuristic" ? (
+                    <HelpCircle className="w-5 h-5 text-zinc-400" />
+                  ) : (
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                  )}
+                  <span
+                    className={`text-xs font-mono font-bold uppercase tracking-wider ${
+                      selectedIncident.diagnosisSource === "heuristic"
+                        ? "text-zinc-300"
+                        : "text-purple-400"
+                    }`}
+                  >
+                    {selectedIncident.diagnosisSource === "heuristic"
+                      ? "Likely Cause (Rule-based Heuristic)"
+                      : "AI Root-Cause Diagnosis"}
                   </span>
                 </div>
-                <p className="text-sm text-purple-200/90 leading-relaxed">
+                <p className="text-sm text-zinc-200 leading-relaxed">
                   {selectedIncident.aiDiagnosis || "Diagnosis pending or unavailable."}
                 </p>
 
                 {selectedIncident.suggestedFix && (
-                  <div className="mt-3 pt-3 border-t border-purple-500/20">
-                    <span className="text-[11px] font-mono text-purple-300 uppercase tracking-wider block mb-1">
+                  <div className="mt-3 pt-3 border-t border-zinc-800">
+                    <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block mb-1">
                       Recommended Fix:
                     </span>
-                    <div className="bg-[#09090b] border border-purple-500/20 rounded-lg p-3 font-mono text-xs text-purple-100 overflow-x-auto">
+                    <div className="bg-[#09090b] border border-zinc-800 rounded-lg p-3 font-mono text-xs text-zinc-100 overflow-x-auto">
                       <code>{selectedIncident.suggestedFix}</code>
                     </div>
                   </div>
@@ -706,5 +872,27 @@ app.use(pulse.errorHandler());`}</pre>
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProjectDetailsPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const resolvedParams = use(params);
+  const slug = resolvedParams.slug;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 animate-pulse">
+          <div className="h-10 w-48 bg-[#18181b] rounded-lg" />
+          <div className="h-64 bg-[#18181b] rounded-xl border border-[#27272a]" />
+        </div>
+      }
+    >
+      <ProjectDetailsContent slug={slug} />
+    </Suspense>
   );
 }
