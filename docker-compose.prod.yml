@@ -71,3 +71,4 @@ services:
 
 volumes:
   pulse_pgdata_prod:
+
