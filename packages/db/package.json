@@ -5,8 +5,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "generate": "prisma generate",
-    "push": "prisma db push",
+    "deploy": "prisma migrate deploy",
     "migrate": "prisma migrate dev",
+    "push": "prisma db push",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

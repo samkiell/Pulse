@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pulse-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulsepassword}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsedb}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pulse_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pulse} -d ${POSTGRES_DB:-pulsedb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: pulse-api-prod
+    restart: always
+    ports:
+      - "${API_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulsepassword}@postgres:5432/${POSTGRES_DB:-pulsedb}?schema=public
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3001}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3000}
+      RUMPTY_AI_ENDPOINT: ${RUMPTY_AI_ENDPOINT:-https://chat.rumptycloud.com/v1/chat/completions}
+      RUMPTY_AI_API_KEY: ${RUMPTY_AI_API_KEY:-}
+      RUMPTY_AI_MODEL: ${RUMPTY_AI_MODEL:-}
+      AI_FALLBACK_ENDPOINT: ${AI_FALLBACK_ENDPOINT:-}
+      AI_FALLBACK_API_KEY: ${AI_FALLBACK_API_KEY:-}
+      AI_FALLBACK_MODEL: ${AI_FALLBACK_MODEL:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: pulse-web-prod
+    restart: always
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pulse}:${POSTGRES_PASSWORD:-pulsepassword}@postgres:5432/${POSTGRES_DB:-pulsedb}?schema=public
+      INTERNAL_API_URL: http://api:3001
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-pulse_production_password_change_me}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+volumes:
+  pulse_pgdata_prod:

@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsup src/server.ts --format cjs --out-dir dist",
+    "build": "tsup",
     "start": "node dist/server.js",
     "test": "tsx --test src/services/ai.test.ts src/services/anomaly.test.ts",
     "typecheck": "tsc --noEmit",
     "telegram:set-webhook": "tsx src/scripts/set-webhook.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.4.1",
     "@pulse/db": "workspace:*",
     "@samkiel/pulse-monitor": "workspace:*",
     "cors": "^2.8.5",
