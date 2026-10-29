@@ -2,6 +2,7 @@ import { prisma } from "@pulse/db";
 import { config } from "../config";
 import { diagnoseError } from "./ai";
 import { sendTelegramAlert } from "./telegram";
+import { logger } from "../lib/logger";
 
 export interface IngestEventItem {
   errorType: string;
@@ -24,6 +25,14 @@ export interface AlertDecision {
   shouldAlert: boolean;
   nextStatus: string;
   isRegression: boolean;
+}
+
+export const inFlightAlerts = new Set<Promise<any>>();
+
+export function trackInFlightAlert<T>(promise: Promise<T>): Promise<T> {
+  inFlightAlerts.add(promise);
+  promise.finally(() => inFlightAlerts.delete(promise));
+  return promise;
 }
 
 /**
@@ -121,17 +130,19 @@ export async function processIngestBatch(
       // 3. Status rules and atomic alert dispatch
       if (incident.occurrenceCount === 1) {
         // Brand new incident, alert immediately
-        void triggerAlertWorkflow(
-          projectId,
-          projectName,
-          projectSlug,
-          incident.id,
-          name,
-          message,
-          event.stack,
-          event.metadata,
-          1,
-          environment
+        trackInFlightAlert(
+          triggerAlertWorkflow(
+            projectId,
+            projectName,
+            projectSlug,
+            incident.id,
+            name,
+            message,
+            event.stack,
+            event.metadata,
+            1,
+            environment
+          )
         );
       } else if (incident.status === "MUTED") {
         // MUTED status stays muted (count occurrences, no alert)
@@ -145,20 +156,22 @@ export async function processIngestBatch(
           },
         });
 
-        void triggerAlertWorkflow(
-          projectId,
-          projectName,
-          projectSlug,
-          incident.id,
-          name,
-          message,
-          event.stack,
-          event.metadata,
-          incident.occurrenceCount,
-          environment,
-          incident.aiDiagnosis || undefined,
-          incident.suggestedFix || undefined,
-          incident.diagnosisSource || undefined
+        trackInFlightAlert(
+          triggerAlertWorkflow(
+            projectId,
+            projectName,
+            projectSlug,
+            incident.id,
+            name,
+            message,
+            event.stack,
+            event.metadata,
+            incident.occurrenceCount,
+            environment,
+            incident.aiDiagnosis || undefined,
+            incident.suggestedFix || undefined,
+            incident.diagnosisSource || undefined
+          )
         );
       } else {
         // OPEN follows the debounce window atomically
@@ -174,31 +187,33 @@ export async function processIngestBatch(
         });
 
         if (updateResult.count === 1) {
-          void triggerAlertWorkflow(
-            projectId,
-            projectName,
-            projectSlug,
-            incident.id,
-            name,
-            message,
-            event.stack,
-            event.metadata,
-            incident.occurrenceCount,
-            environment,
-            incident.aiDiagnosis || undefined,
-            incident.suggestedFix || undefined,
-            incident.diagnosisSource || undefined
+          trackInFlightAlert(
+            triggerAlertWorkflow(
+              projectId,
+              projectName,
+              projectSlug,
+              incident.id,
+              name,
+              message,
+              event.stack,
+              event.metadata,
+              incident.occurrenceCount,
+              environment,
+              incident.aiDiagnosis || undefined,
+              incident.suggestedFix || undefined,
+              incident.diagnosisSource || undefined
+            )
           );
         }
       }
-    } catch (eventError) {
-      console.error("[Pulse Ingest] Error processing event in batch:", eventError);
+    } catch (eventError: any) {
+      logger.error("Error processing event in batch", { error: eventError.message || String(eventError) });
     }
   }
 }
 
 /**
- * Background worker: Runs AI root-cause diagnosis and dispatches Telegram notification
+ * Background worker: Runs AI root-cause diagnosis and dispatches Telegram notification.
  */
 async function triggerAlertWorkflow(
   projectId: string,
@@ -225,7 +240,7 @@ async function triggerAlertWorkflow(
       const aiResult = await diagnoseError(name, message, stack, metadata);
       diagnosis = aiResult.diagnosis;
       suggestedFix = aiResult.suggestedFix;
-      source = (aiResult as any).source || "heuristic";
+      source = aiResult.source;
 
       await prisma.incident.update({
         where: { id: incidentId },
@@ -251,7 +266,10 @@ async function triggerAlertWorkflow(
       suggestedFix,
       isRuleBased,
     });
-  } catch (err) {
-    console.error(`[Pulse Alert Worker] Failed for incident ${incidentId}:`, err);
+  } catch (err: any) {
+    logger.error("Alert worker failed for incident", {
+      incidentId,
+      error: err.message || String(err),
+    });
   }
 }

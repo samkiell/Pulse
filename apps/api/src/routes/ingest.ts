@@ -5,6 +5,7 @@ import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { createHash } from "node:crypto";
 import { processIngestBatch } from "../services/anomaly";
+import { logger } from "../lib/logger";
 
 export const ingestRouter = Router();
 
@@ -123,8 +124,8 @@ ingestRouter.post(
         ingestedCount: parsed.data.events.length,
         projectId: apiKeyRecord.projectId,
       });
-    } catch (error) {
-      console.error("[Pulse Ingest] Error processing batch:", error);
+    } catch (error: any) {
+      logger.error("Error processing ingest batch", { error: error.message || String(error) });
       res.status(500).json({ error: "Internal error processing events." });
     }
   }

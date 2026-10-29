@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { config } from "../config";
 import { handleTelegramUpdate } from "../services/telegram";
+import { logger } from "../lib/logger";
 
 export const telegramRouter = Router();
 
@@ -34,8 +35,10 @@ telegramRouter.post("/webhook", async (req: Request, res: Response): Promise<voi
       await handleTelegramUpdate(update);
     }
     res.status(200).send("OK");
-  } catch (error) {
-    console.error("[Telegram Webhook] Error handling update:", error);
+  } catch (error: any) {
+    logger.error("Error handling Telegram webhook update", {
+      error: error.message || String(error),
+    });
     // Keep returning 200 for handler errors so Telegram does not continually retry
     res.status(200).send("OK");
   }

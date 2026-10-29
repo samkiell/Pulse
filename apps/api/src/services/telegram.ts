@@ -1,5 +1,6 @@
 import { prisma } from "@pulse/db";
 import { config } from "../config";
+import { logger } from "../lib/logger";
 
 export interface AlertNotificationPayload {
   projectName: string;
@@ -15,14 +16,14 @@ export interface AlertNotificationPayload {
 }
 
 /**
- * Dispatches an alert to all active Telegram integrations linked to the project
+ * Dispatches an alert to all active Telegram integrations linked to the project.
  */
 export async function sendTelegramAlert(
   projectId: string,
   payload: AlertNotificationPayload
 ): Promise<void> {
   if (!config.telegramBotToken) {
-    console.warn("[Telegram] Alert skipped: TELEGRAM_BOT_TOKEN not configured.");
+    logger.warn("Telegram alert skipped: TELEGRAM_BOT_TOKEN not configured");
     return;
   }
 
@@ -60,14 +61,17 @@ ${escapeHtml(payload.aiDiagnosis || "Diagnosis pending...")}
     if (!integration.chatId) continue;
     try {
       await sendTelegramMessage(integration.chatId, messageText, integration.id);
-    } catch (err) {
-      console.error(`[Telegram] Failed to send alert to chat ${integration.chatId}:`, err);
+    } catch (err: any) {
+      logger.error("Failed to send alert to chat", {
+        chatId: integration.chatId,
+        error: err.message || String(err),
+      });
     }
   }
 }
 
 /**
- * Sends a message using Telegram Bot API
+ * Sends a message using Telegram Bot API.
  */
 export async function sendTelegramMessage(
   chatId: string | number,
@@ -95,7 +99,7 @@ export async function sendTelegramMessage(
 
   let response = await makeRequest();
 
-  // If rate limited (429), retry once after retry_after seconds
+  // If rate limited (429), wait retry_after seconds once, then give up
   if (response.status === 429) {
     try {
       const data = (await response.json()) as any;
@@ -103,7 +107,6 @@ export async function sendTelegramMessage(
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
       response = await makeRequest();
     } catch {
-      // Give up on retry failure
       return;
     }
   }
@@ -126,7 +129,7 @@ export async function sendTelegramMessage(
 }
 
 /**
- * Handles incoming webhook updates from Telegram
+ * Handles incoming webhook updates from Telegram.
  */
 export async function handleTelegramUpdate(update: any): Promise<void> {
   const message = update?.message;

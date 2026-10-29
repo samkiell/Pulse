@@ -1,5 +1,38 @@
 import dotenv from "dotenv";
+import { z } from "zod";
+import { logger } from "./lib/logger";
+
 dotenv.config();
+
+const ProductionEnvSchema = z.object({
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1, "TELEGRAM_WEBHOOK_SECRET is required"),
+  PUBLIC_API_URL: z.string().url("PUBLIC_API_URL must be a valid URL"),
+  DASHBOARD_URL: z
+    .string()
+    .url("DASHBOARD_URL must be a valid URL")
+    .refine((url) => url.startsWith("https://"), {
+      message: "DASHBOARD_URL must use https in production",
+    }),
+});
+
+export function validateProductionConfig(): void {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  const result = ProductionEnvSchema.safeParse(process.env);
+  if (!result.success) {
+    const missing = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+    logger.error("Production environment configuration validation failed", { missing });
+    console.error(
+      "Missing or invalid production environment variables:\n" +
+        missing.map((m) => ` - ${m}`).join("\n")
+    );
+    process.exit(1);
+  }
+}
 
 export const config = {
   port: parseInt(process.env.PORT || "4000", 10),
