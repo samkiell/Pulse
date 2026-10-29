@@ -18,7 +18,7 @@ function safeCompare(a: string, b: string): boolean {
 
 telegramRouter.post("/webhook", async (req: Request, res: Response): Promise<void> => {
   const incomingSecret = req.headers["x-telegram-bot-api-secret-token"];
-  const expectedSecret = config.telegramWebhookSecret;
+  const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET || config.telegramWebhookSecret;
 
   if (
     !incomingSecret ||

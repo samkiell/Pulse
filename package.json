@@ -5,7 +5,7 @@
   "scripts": {
     "postinstall": "pnpm --filter @pulse/db generate",
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
-    "build": "pnpm --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build",
+    "build": "pnpm --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build && pnpm --filter \"./examples/*\" build",
     "start:api": "node apps/api/dist/server.js",
     "start:web": "pnpm --filter @pulse/web start",
     "test": "pnpm --filter @samkiel/pulse-monitor test && pnpm --filter @pulse/api test",
