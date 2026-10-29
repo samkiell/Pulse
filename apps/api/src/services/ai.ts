@@ -43,7 +43,7 @@ export function logAiProvidersAtStartup(): void {
  * Scrubs sensitive secrets from text (stack traces, messages).
  */
 export function scrubSecrets(input: string): string {
-  if (!input) return "";
+  if (!input || typeof input !== "string") return "";
 
   let scrubbed = input;
 
@@ -121,13 +121,34 @@ function parseAndValidateLlmResponse(
 
     // Find JSON block
     const firstBrace = stripped.indexOf("{");
-    const lastBrace = stripped.lastIndexOf("}");
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    if (firstBrace === -1) {
       return null;
     }
 
-    const jsonSub = stripped.slice(firstBrace, lastBrace + 1);
-    const parsed = JSON.parse(jsonSub);
+    let jsonSub = stripped.slice(firstBrace);
+    const lastBrace = jsonSub.lastIndexOf("}");
+    if (lastBrace !== -1) {
+      jsonSub = jsonSub.slice(0, lastBrace + 1);
+    } else {
+      // Handle incomplete trailing closure
+      if (jsonSub.endsWith('"')) {
+        jsonSub += "}";
+      } else {
+        jsonSub += '"}';
+      }
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonSub);
+    } catch {
+      // Second attempt: try closing quote and brace if unclosed string
+      try {
+        parsed = JSON.parse(jsonSub + '"}');
+      } catch {
+        return null;
+      }
+    }
     const validated = AiResponseSchema.safeParse(parsed);
 
     if (!validated.success) {
@@ -159,10 +180,10 @@ async function callLlmProvider(
 
   const systemPrompt = `You are Pulse AI, an expert systems and runtime debugger for Node.js apps.
 Analyze the provided error, stack trace, and context.
-Respond ONLY with a JSON object without any conversational text or markdown code fences:
+Respond ONLY with a complete, closed JSON object without markdown code fences or conversational text:
 {
-  "diagnosis": "A crisp, 1-2 sentence root cause explanation (max 600 chars).",
-  "suggestedFix": "Precise, actionable code snippet or configuration change to fix the issue (max 1200 chars)."
+  "diagnosis": "A crisp, 1-2 sentence root cause explanation (max 500 chars).",
+  "suggestedFix": "Precise, actionable code snippet or configuration change to fix the issue (max 800 chars)."
 }`;
 
   try {
@@ -179,7 +200,8 @@ Respond ONLY with a JSON object without any conversational text or markdown code
           { role: "user", content: userPrompt },
         ],
         temperature: 0.2,
-        max_tokens: 600,
+        max_tokens: 1000,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -203,7 +225,7 @@ Respond ONLY with a JSON object without any conversational text or markdown code
 
     const result = parseAndValidateLlmResponse(content);
     if (!result) {
-      console.warn(`[Pulse AI] Provider ${providerName} returned invalid schema.`);
+      console.warn(`[Pulse AI] Provider ${providerName} returned invalid schema: ${content}`);
       return null;
     }
 
