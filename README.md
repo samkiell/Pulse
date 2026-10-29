@@ -1,183 +1,279 @@
 # Pulse ⚡
 
-> **Real-time crash alerting and AI root-cause diagnosis for applications deployed on Rumpty Cloud.**
+Real-time crash alerting and AI root-cause diagnosis infrastructure for applications deployed on Rumpty Cloud.
 
-Pulse bridges the runtime observability gap in Rumpty Cloud. Because Rumpty currently provides build logs and hardware VM metrics without application-level runtime error alerting, Pulse delivers instant incident notifications with AI-powered root-cause summaries directly to Telegram.
+## Live Deployment Links
+
+- Dashboard: {{LIVE_DASHBOARD_URL}}
+- Ingest API: {{LIVE_API_URL}}
+- Video Walkthrough: {{DEMO_VIDEO_URL}}
 
 ---
 
-## 📑 Architecture Overview
+## Why Pulse Exists
 
-Pulse is architected as an infrastructure monorepo powered by `pnpm`:
+Rumpty Cloud provides Git deployments with automated container rebuilds, but it provides no runtime logs, metrics, or alerting API. Specifically:
+- VM metrics are dashboard charts only.
+- Deployment logs are build logs only.
+- Audit logs capture account-level administrative actions only.
 
+When an application crashes or throws uncaught exceptions at runtime on Rumpty Cloud, developers receive no automated push alerts or diagnostic telemetry. Pulse closes this gap. It captures application exceptions via a lightweight Node.js SDK, clusters identical errors into incidents, generates AI-driven root-cause explanations with heuristic fallbacks, and delivers real-time incident notifications directly to Telegram.
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    App["Node.js Application<br>(@samkiel/pulse-monitor)"] -->|"POST /api/v1/ingest (Batch & Retries)"| API["Pulse API Engine<br>(apps/api)"]
+    
+    subgraph Ingestion & Processing
+        API --> Auth["Key Hashing & Rate Limiting"]
+        Auth --> Upsert["Atomic Incident Upsert & Event Pruning"]
+        Upsert --> DB[("Managed PostgreSQL<br>(packages/db)")]
+        Upsert --> Debounce["Debounce & Regression Engine"]
+    end
+
+    subgraph AI Root Cause Engine
+        Debounce --> Scrubber["Secret & PII Scrubber"]
+        Scrubber --> RumptyAI["Primary: Rumpty Cloud AI<br>(chat.rumptycloud.com)"]
+        RumptyAI -.->|"Timeout / Fail-soft"| FallbackAI["Secondary: Fallback LLM"]
+        FallbackAI -.->|"Fail-soft"| Heuristics["Rule-Based Pattern Matcher"]
+    end
+
+    subgraph Notification & Observability
+        RumptyAI --> TG["Telegram Bot Dispatch<br>(Instant Chat Alert)"]
+        FallbackAI --> TG
+        Heuristics --> TG
+        DB --> Web["Next.js 16 Dashboard<br>(apps/web)"]
+    end
 ```
-User App (with pulse-monitor SDK)
-  │
-  ▼ POST /api/v1/ingest
-Pulse API Engine (apps/api)
-  ├── 1. Auth & Schema Validation (Zod)
-  ├── 2. Deterministic Error Fingerprinting & Deduplication
-  ├── 3. Sliding Window Anomaly Detection
-  ├── 4. AI Diagnosis (Rumpty AI Inference Llama-3-70B / Heuristic Fallback)
-  └── 5. Storage (PostgreSQL via Prisma)
-  │
-  ├──────────────────────────────────┐
-  ▼                                  ▼
-Telegram Bot Alert Dispatch    Pulse Web Dashboard (apps/web)
-(Instant push notification)    (Incident feed, AI inspection, test simulator)
-```
 
-### Monorepo Structure
+### Monorepo Packages
 
 | Package / App | Purpose | Technology |
 |---|---|---|
-| [`packages/sdk`](./packages/sdk) | Lightweight error-tracking client (`pulse-monitor`) | TypeScript, tsup (CJS, ESM, DTS) |
-| [`packages/db`](./packages/db) | Shared database schema and client singleton | Prisma, PostgreSQL |
-| [`apps/api`](./apps/api) | High-throughput ingestion & anomaly detection engine | Express, TypeScript, Zod |
-| [`apps/web`](./apps/web) | Real-time observability dashboard & incident manager | Next.js 16 (Turbopack), TailwindCSS, shadcn/ui |
+| [`packages/sdk`](./packages/sdk) | Client error telemetry SDK (`@samkiel/pulse-monitor`) | TypeScript, tsup (CJS, ESM, DTS) |
+| [`packages/db`](./packages/db) | Database schema, migrations, and Prisma client | Prisma 6, PostgreSQL |
+| [`apps/api`](./apps/api) | High-throughput ingest API, deduplication, AI pipeline | Express 4, tsup, Zod |
+| [`apps/web`](./apps/web) | Authenticated incident dashboard and key management | Next.js 16 (Turbopack), TailwindCSS |
+| [`examples/demo-app`](./examples/demo-app) | Sample application instrumented with Pulse | Express, Docker |
 
 ---
 
-## 🚀 Quickstart
+## 5-Minute SDK Quickstart
 
-### 1. Prerequisites
-- **Node.js**: v20+ (Node 22 or 26 recommended)
-- **Package Manager**: `pnpm` (v9+)
-- **Database**: PostgreSQL (Local or Rumpty Managed DB)
+### 1. Install the SDK
 
-### 2. Installation & Setup
-
-Clone the repository and install workspace dependencies:
 ```bash
-git clone https://github.com/SAMKIEL/Pulse.git
-cd Pulse
-pnpm install
-```
-
-Configure your environment variables:
-```bash
-cp .env.example .env
-```
-
-Start the local PostgreSQL container (optional if using external DB):
-```bash
-docker compose up -d
-```
-
-Generate and push the Prisma database schema:
-```bash
-pnpm db:push
-```
-
-### 3. Running Locally
-
-Start both the API engine (port `4000`) and the Next.js Web Dashboard (port `3000`):
-```bash
-pnpm dev
-```
-
-* **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-* **Ingestion API**: [http://localhost:4000/api/v1/ingest](http://localhost:4000/api/v1/ingest)
-* **API Health Check**: [http://localhost:4000/health](http://localhost:4000/health)
-
----
-
-## 📦 Using the SDK (`pulse-monitor`)
-
-### Installation
-```bash
-npm install pulse-monitor
+npm install @samkiel/pulse-monitor
 # or
-pnpm add pulse-monitor
+pnpm add @samkiel/pulse-monitor
 ```
 
-### Initialization
-Initialize Pulse at the entrypoint of your application before any other modules load:
+### 2. Initialize in Your Application
+
+Initialize `@samkiel/pulse-monitor` at the earliest entry point before any other modules load:
 
 ```typescript
-import pulse from "pulse-monitor";
+import pulse from "@samkiel/pulse-monitor";
 
 pulse.init({
-  apiKey: process.env.PULSE_API_KEY,
-  endpoint: process.env.PULSE_ENDPOINT || "http://localhost:4000/api/v1/ingest",
+  apiKey: process.env.PULSE_API_KEY || "",
+  endpoint: process.env.PULSE_ENDPOINT || "https://api.yourdomain.com/api/v1/ingest",
   environment: process.env.NODE_ENV || "production",
-  captureUncaughtExceptions: true,
-  captureUnhandledRejections: true,
+  release: process.env.APP_VERSION || "1.0.0",
 });
 ```
 
-### Express / Connect Middleware
-Attach the error handler middleware at the end of your route definitions:
+### 3. Attach Express Middleware
+
+Attach `pulse.errorHandler()` as an error middleware after your route definitions:
 
 ```typescript
 import express from "express";
-import pulse from "pulse-monitor";
+import pulse from "@samkiel/pulse-monitor";
 
 const app = express();
 
-// ... your routes ...
+// Application routes
+app.get("/", (req, res) => res.send("OK"));
 
-// Attach after all routes
+// Attach Pulse error middleware
 app.use(pulse.errorHandler());
 
-app.listen(8080);
+// Fallback client error response
+app.use((err, req, res, next) => {
+  res.status(500).json({ error: "Internal Server Error" });
+});
+
+app.listen(process.env.PORT || 3000);
 ```
 
-### Manual Error Capture
+### 4. Manual Error Capture
+
+Capture handled exceptions or background worker failures with structured metadata:
+
 ```typescript
 try {
-  await processPayment(payload);
+  await executeDatabaseQuery();
 } catch (error) {
   pulse.captureError(error, {
-    userId: "usr_12345",
-    amount: 99.00,
+    tenantId: "cust_9876",
+    action: "database_sync",
   });
 }
 ```
 
 ---
 
-## 🤖 Telegram Bot Integration
+## Telegram Bot Setup Guide
 
-1. In the Pulse Dashboard, create or select a project.
-2. Navigate to the **Telegram Bot** tab to receive a one-time connection token.
-3. Open Telegram and message [@PulseMonitorBot](https://t.me/PulseMonitorBot):
+1. Open Telegram and message [@BotFather](https://t.me/BotFather) to create a new bot using `/newbot`.
+2. Save the API token generated by BotFather (e.g., `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).
+3. Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and a random `TELEGRAM_WEBHOOK_SECRET` in your API environment.
+4. After deploying the API, register the webhook with Telegram:
+
+```bash
+pnpm --filter @pulse/api telegram:set-webhook
+```
+
+5. Log in to the Pulse Dashboard, create or open a project, and navigate to the Telegram tab.
+6. Click the deep link to start the bot in your group or direct message chat:
    ```text
-   /start <YOUR_VERIFICATION_TOKEN>
+   https://t.me/YourBotUsername?start=<ONE_TIME_TOKEN>
    ```
-4. The bot will link the chat and immediately stream crash alerts with AI root-cause summaries whenever an incident occurs.
+7. Send the `/start` command with the token to link the chat. Future incidents will trigger instant push notifications.
 
 ---
 
-## 🧪 Testing & Verification
+## Security Model
 
-Run the automated test suite across all workspace packages:
+Pulse adheres to strict production security practices:
+
+- **Hashed API Keys:** API keys follow the format `pulse_live_<32 hex chars>`. Keys are hashed using SHA-256 before storage in PostgreSQL (`keyHash`). The plain key is displayed exactly once upon generation. Ingest requests hash the incoming key before query lookup.
+- **Dashboard Basic Auth Gate:** All dashboard pages and `/api/projects/**` routes are protected by HTTP Basic Auth using constant-time string comparisons (`crypto.timingSafeEqual`). In production, omitting `DASHBOARD_PASSWORD` fails closed with HTTP 503.
+- **Rate Limiting:** Ingest endpoints enforce rate limits of 120 requests per minute per API key (falling back to client IP), returning HTTP 429 with standard `Retry-After` headers.
+- **Secret and PII Scrubber:** Error stack traces and metadata objects are scrubbed before reaching any LLM provider. Scrubbers redact Bearer tokens, `pulse_live_*` API keys, long hex and base64 strings, email addresses, and keys matching sensitive keywords (`password`, `token`, `secret`, `authorization`, `cookie`, `key`).
+- **Telegram Webhook Verification:** Incoming Telegram webhook requests are validated using constant-time verification of header `X-Telegram-Bot-Api-Secret-Token`.
+- **Single-Use Link Tokens:** Telegram verification tokens are single-use and expire 24 hours after creation.
+
+---
+
+## Environment Variables Reference
+
+| Variable | Service | Required in Prod | Default | Description |
+|---|---|---|---|---|
+| `DATABASE_URL` | Database / API / Web | Yes | - | PostgreSQL connection string. For Rumpty SSL, append `?sslmode=require`. |
+| `PUBLIC_API_URL` | API | Yes | - | Public internet URL for API (used for Telegram webhooks). |
+| `PORT` | API / Web | No | `3001` (API) / `3000` (Web) | HTTP listening port. Honors container environment assignment. |
+| `NODE_ENV` | API / Web | Yes | `production` | Operational environment mode. |
+| `DASHBOARD_USER` | Web | No | `admin` | HTTP Basic Auth username for web dashboard. |
+| `DASHBOARD_PASSWORD` | Web | Yes | - | HTTP Basic Auth password. Fails closed with 503 if missing in production. |
+| `DASHBOARD_URL` | API | Yes | - | Web dashboard URL included in Telegram incident alerts. |
+| `INTERNAL_API_URL` | Web | No | `http://localhost:3001` | Internal URL used by Next.js rewrites to communicate with API. |
+| `INTERNAL_INGEST_URL` | Web | No | `http://localhost:3001/api/v1/ingest` | Internal endpoint used by dashboard simulator. |
+| `CORS_ORIGINS` | API | No | `http://localhost:3000` | Comma-separated allowed origins for dashboard API calls. |
+| `ALERT_DEBOUNCE_WINDOW_MINUTES` | API | No | `5` | Window in minutes to suppress duplicate alerts for recurring errors. |
+| `RETENTION_DAYS` | API | No | `30` | Number of days before historical error events are automatically pruned. |
+| `RUMPTY_AI_ENDPOINT` | API | No | `https://chat.rumptycloud.com/v1/chat/completions` | Rumpty Cloud OpenAI-compatible inference endpoint. |
+| `RUMPTY_AI_API_KEY` | API | No | `""` | Rumpty AI API key. When unset, falls back to rule-based heuristics. |
+| `RUMPTY_AI_MODEL` | API | No | `""` | Active model identifier from `GET /v1/models`. |
+| `AI_FALLBACK_ENDPOINT` | API | No | `""` | Optional secondary OpenAI-compatible endpoint (e.g. Groq, Together). |
+| `AI_FALLBACK_API_KEY` | API | No | `""` | Optional secondary API key. |
+| `AI_FALLBACK_MODEL` | API | No | `""` | Optional secondary model identifier. |
+| `TELEGRAM_BOT_TOKEN` | API | Yes | `""` | Bot token from @BotFather. |
+| `TELEGRAM_BOT_USERNAME` | API / Web | No | `PulseMonitorBot` | Bot username handle without @. |
+| `TELEGRAM_WEBHOOK_SECRET` | API | Yes | `""` | Shared secret token for webhook verification. |
+| `TELEGRAM_API_BASE` | API | No | `https://api.telegram.org` | Base URL for Telegram Bot API (customizable for testing). |
+
+---
+
+## Local Development & Docker
+
+### Local Repository Setup
+
+```bash
+git clone https://github.com/samkiell/Pulse.git
+cd Pulse
+pnpm install
+cp .env.example .env
+```
+
+Start the local database:
+
+```bash
+docker compose up -d
+pnpm db:deploy
+```
+
+Start development servers:
+
+```bash
+pnpm dev
+```
+
+### Production Docker Compose
+
+Run the production multi-container stack locally:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+---
+
+## Production Deployment to Rumpty Cloud
+
+For complete step-by-step instructions on deploying the database, API, dashboard, and demo app to Rumpty Cloud, see [Deployment Guide](docs/DEPLOYMENT.md).
+
+---
+
+## Dashboard Interface Mockup
+
+```text
++-----------------------------------------------------------------------------------+
+|  Pulse Observability Dashboard                                      Project: Prod |
++-----------------------------------------------------------------------------------+
+|  Active Incidents (2)     Total Occurrences: 1,482        Alert Status: Active    |
+|                                                                                   |
+|  [CRITICAL] DatabaseConnectionError: connect ECONNREFUSED 127.0.0.1:5432         |
+|  Status: OPEN | First: 14m ago | Last: 1m ago | Total: 42 events                  |
+|  Diagnosis [AI]: Postgres host is unreachable or rejected connection pool.       |
+|  Suggested Fix: Verify DATABASE_URL hostname and ensure managed DB is running.    |
+|                                                                                   |
+|  [HIGH] TypeError: Cannot read properties of undefined (reading 'headers')        |
+|  Status: RESOLVED | First: 2h ago | Last: 45m ago | Total: 8 events               |
+|  Diagnosis [Rule-Based]: Null reference encountered during request parsing.      |
++-----------------------------------------------------------------------------------+
+```
+
+Visual UI assets and application screenshots are available in [docs/images/](docs/images/).
+
+---
+
+## Verification & Test Commands
+
+Run the full test suite across the monorepo:
+
 ```bash
 pnpm test
 ```
 
-Build all packages and applications for production:
+Run TypeScript verification across all workspace packages:
+
+```bash
+pnpm typecheck
+```
+
+Build all packages and applications:
+
 ```bash
 pnpm build
 ```
 
 ---
 
-## ⚙️ Environment Configuration
+## License
 
-| Variable | Description | Default |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://pulse:pulsepassword@localhost:5432/pulsedb` |
-| `PORT` / `API_PORT` | HTTP port for the ingestion API | `4000` |
-| `RUMPTY_AI_ENDPOINT` | OpenAI-compatible endpoint for LLM root-cause summaries | `https://api.rumpty.cloud/v1/chat/completions` |
-| `RUMPTY_AI_API_KEY` | Rumpty AI / OpenAI API Key | `""` (uses rule-based heuristic fallback if empty) |
-| `RUMPTY_AI_MODEL` | AI Model ID | `rumpty-llama-3-70b-instruct` |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot token from @BotFather | `""` |
-| `TELEGRAM_BOT_USERNAME` | Telegram Bot username handle | `PulseMonitorBot` |
-| `ALERT_DEBOUNCE_WINDOW_MINUTES` | Window to deduplicate alerts for recurring crash loops | `5` |
-| `DASHBOARD_URL` | Base URL of web dashboard (used for Telegram links) | `http://localhost:3000` |
-
----
-
-## 📄 License
-MIT © [SAMKIEL](https://github.com/SAMKIEL)
+MIT (c) 2026 Samuel Ezekiel. See [LICENSE](LICENSE) for details.

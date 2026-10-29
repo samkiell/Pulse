@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Activity, ShieldAlert, Terminal } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Pulse — Crash Alerting & AI Diagnosis for Rumpty Cloud",
+  title: "Pulse: Crash Alerting & AI Diagnosis for Rumpty Cloud",
   description: "Instant runtime error alerting and AI root-cause diagnosis delivered straight to Telegram.",
 };
 

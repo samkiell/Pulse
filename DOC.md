@@ -1,107 +1,123 @@
-# Pulse — Technical Documentation (Source of Truth)
+# Pulse: Technical Architecture and System Design
 
-## 1. What Pulse Is
+## 1. System Overview
 
-Pulse is observability infrastructure for apps deployed on Rumpty Cloud. It tells a developer the moment their app crashes or throws errors, with an AI-generated explanation of the likely root cause, delivered straight to Telegram.
+Pulse is crash alerting and diagnostic observability infrastructure designed for applications deployed on Rumpty Cloud. It captures runtime errors, generates AI-assisted root-cause explanations, and delivers alerts to developers via Telegram while persisting incident history in a Next.js dashboard.
 
-Pulse is not an end-user app. It is infra other developers integrate into their own projects.
+Pulse is developer infrastructure integrated into client applications via `@samkiel/pulse-monitor`.
 
-## 2. The Problem
+---
 
-Rumpty Cloud has no runtime error alerting, no crash notifications, and no app-level log/metrics API.
+## 2. Platform Context: The Rumpty Cloud Observability Gap
 
-Confirmed from Rumpty's own docs:
-- **VM Metrics**: CPU, memory, disk, bandwidth. Dashboard charts only. No alerting, no documented API to pull this programmatically.
-- **Deployments**: build logs only, this is CI output from the build step, not runtime application logs.
-- **Audit Logs**: account-level action history (who did what in the console), not app behavior.
-- **CLI**: supports `ssh`, `exec`, `vm` management, but nothing for log streaming, metrics polling, or alerting.
+Rumpty Cloud provides Git deployments with container health checking via HTTP polling on an assigned port. However, it lacks runtime observability features:
+- VM Metrics: CPU, memory, disk, bandwidth. Dashboard charts only. No alerting or programmatic retrieval API.
+- Deployments: Build logs only from CI compilation steps, not runtime application logs.
+- Audit Logs: Account-level action history (who performed which console action), not runtime app behavior.
+- CLI: Supports SSH and VM management, but offers no log streaming or alerting hooks.
 
-Net result: if a deployed app crashes, the developer finds out by manually checking the dashboard or SSHing in, or worse, from a user complaint. There is no push notification of any kind.
+When a deployed app crashes or throws errors, developers receive no push notifications. Pulse provides this alerting layer.
 
-## 3. The Solution
+---
 
-A lightweight SDK the developer drops into their app. It captures uncaught exceptions and error events, and forwards them to the Pulse backend. Pulse detects anomalies, asks an LLM (via Rumpty's AI Inference endpoint) to summarize the likely root cause, and pushes an alert to the developer's Telegram with the diagnosis and a suggested fix. A dashboard shows alert history over time.
+## 3. Monorepo Architecture and Packages
 
-## 4. Why This Is Infra, Not an App
+The repository is organized as a pnpm monorepo:
 
-- It has an integration point (SDK), an ingestion/processing layer (backend), and a delivery channel (bot). That's infra shape.
-- It is consumed by other developers inside their own projects, not used directly by end users.
-- It solves an operational gap in the platform itself (Rumpty has no runtime observability), not a one-off use case.
-
-## 5. Architecture
-
-### 5.1 Components
-
-1. **Pulse SDK** (npm package)
-   - Dropped into the user's app (`require('pulse-monitor')` or equivalent middleware)
-   - Captures uncaught exceptions, unhandled rejections, and explicit error logs
-   - Batches and POSTs events to the Pulse backend over HTTPS
-
-2. **Pulse Backend** (Node.js service, deployed on Rumpty)
-   - Receives events from the SDK
-   - Runs anomaly detection (error spike, repeated crash, crash loop)
-   - On trigger, sends the relevant log/error context to Rumpty AI Inference for root cause summarization
-   - Persists events and alerts to Postgres (Rumpty Managed DB)
-
-3. **Telegram Bot**
-   - Delivers formatted alerts: what broke, likely root cause, suggested fix, timestamp
-   - One bot, multiple connected projects per user via chat ID mapping
-
-4. **Dashboard** (Next.js, deployed on Rumpty)
-   - Lists connected projects
-   - Shows alert history with root causes
-   - Minimal auth via Pulse-issued API key per project
-
-5. **Storage**
-   - Postgres: users, projects, API keys, Telegram chat mappings, alert history
-
-### 5.2 Data Flow
-
-```
-User's app (with Pulse SDK)
-  → Pulse Backend (ingest + anomaly detection)
-  → [if triggered] Rumpty AI Inference (root cause summary)
-  → Telegram Bot (alert delivered) + Postgres (stored)
-  → Dashboard (reads from Postgres)
+```text
+Pulse/
+├── apps/
+│   ├── api/          # Express 4 ingestion API and anomaly engine (built with tsup)
+│   └── web/          # Next.js 16 authenticated observability dashboard
+├── packages/
+│   ├── db/           # Prisma 6 schema, baseline migrations, client singleton
+│   └── sdk/          # Client error tracking SDK (@samkiel/pulse-monitor)
+├── examples/
+│   └── demo-app/     # Sample instrumented Express application
+└── docs/
+    └── DEPLOYMENT.md # Rumpty Cloud production deployment guide
 ```
 
-### 5.3 Tech Stack
+### 3.1 SDK (`packages/sdk`)
+- Package name: `@samkiel/pulse-monitor`
+- Formats: CommonJS (`.js`), ES Modules (`.mjs`), TypeScript declarations (`.d.ts`)
+- Features:
+  - Registers `uncaughtException` and `unhandledRejection` handlers once (idempotent `init`).
+  - Does not register `SIGTERM` or `SIGINT` handlers, avoiding process shutdown hangs.
+  - Flushes queued errors on `uncaughtException` with a hard 3-second abort timeout before terminating with `process.exit(1)`.
+  - Queue cap: Limits internal buffer to 200 events, dropping oldest events to prevent memory leaks.
+  - Header allowlist: Express middleware forwards only permitted headers (`user-agent`, `content-type`, `accept`, `host`, `referer`, `x-request-id`, `x-forwarded-for`). Sensitive headers like `authorization` and `cookie` are stripped.
+  - Fails safe: If `PULSE_ENDPOINT` or `apiKey` is missing, logs a single warning and remains disabled without throwing into the host app.
 
-| Layer | Choice |
-|---|---|
-| SDK | Node.js/TypeScript npm package |
-| Backend | Node.js (Express or Fastify) |
-| Database | Postgres (Rumpty Managed DB) |
-| AI | Rumpty AI Inference (OpenAI-compatible endpoint) |
-| Bot | Telegram Bot API |
-| Dashboard | Next.js |
-| Hosting | Rumpty Cloud Deployments (all services) |
+### 3.2 Ingestion Engine (`apps/api`)
+- Server framework: Express 4 with TypeScript, compiled via `tsup` to Node 22 CommonJS.
+- Ingestion route: `POST /api/v1/ingest`
+- Security & Validation:
+  - Zod payload limits: Max 50 events per batch, name max 200 chars, message max 5000 chars, stack max 20000 chars, metadata serialized size max 16 KB. Request body capped at 256 KB.
+  - API key hashing: Presented keys (`pulse_live_<hex>`) are hashed with SHA-256 and matched against `ApiKey.keyHash`.
+  - Rate limiting: 120 requests per minute per API key (falling back to client IP) via `express-rate-limit`. Returns HTTP 429 with `Retry-After`.
+  - HTTP security: `helmet` defaults with restricted CORS allowlist from `CORS_ORIGINS`.
+- Deduplication and Incident Decision Engine:
+  - Events are clustered into incidents using deterministic 16-character hexadecimal fingerprints.
+  - Atomic upsert creates or increments incident occurrence counts without race conditions.
+  - Status rules: `MUTED` incidents stay muted without alerting. `RESOLVED` incidents alert immediately on recurrence (regression detection). `OPEN` incidents respect the debounce window (`ALERT_DEBOUNCE_WINDOW_MINUTES`).
+- Retention Scheduler: Runs daily to prune `ErrorEvent` records older than `RETENTION_DAYS` (default 30) and caps events to 100 per incident.
 
-## 6. Core Flow (Step by Step)
+### 3.3 Multi-Provider AI Diagnosis (`apps/api/src/services/ai.ts`)
+- Chain of responsibility:
+  1. Primary: Rumpty Cloud AI Inference (`https://chat.rumptycloud.com/v1/chat/completions`) with a 6-second timeout.
+  2. Secondary: Optional fallback OpenAI-compatible provider (`AI_FALLBACK_ENDPOINT`) with a 6-second timeout.
+  3. Tertiary: Rule-based pattern matching (e.g. `ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`, SyntaxError).
+- Secret scrubber: Redacts Bearer tokens, `pulse_live_*` keys, long hex/base64 strings, email addresses, and sensitive object keys prior to sending prompts to any LLM.
+- Persists diagnosis source (`rumpty`, `fallback-llm`, or `heuristic`) in `Incident.diagnosisSource`. Cached heuristic diagnoses are automatically retried on the next alert.
 
-1. Developer signs up on Pulse dashboard, creates a project, gets an API key
-2. Developer installs the SDK and initializes it with the API key
-3. Developer links their Telegram via a `/start <token>` command on the bot
-4. App runs normally; SDK silently monitors for errors
-5. On an uncaught exception or error threshold breach, SDK sends event to backend
-6. Backend detects anomaly, pulls context, calls AI Inference for diagnosis
-7. Backend stores the alert and triggers the Telegram bot to notify the user
-8. Developer can review full alert history on the dashboard
+### 3.4 Telegram Bot Integration (`apps/api/src/routes/telegram.ts`)
+- Webhook verification: Validates `X-Telegram-Bot-Api-Secret-Token` with `crypto.timingSafeEqual`.
+- Commands:
+  - `/start <token>`: Validates and consumes single-use linking token (24-hour expiration) to map the chat to the project.
+  - `/status`: Reports monitoring status, project name, and active incidents.
+  - `/stop`: Deactivates Telegram alerts for the chat.
+  - `/help`: Displays available commands.
+- Configurable base URL via `TELEGRAM_API_BASE` for test mockability.
 
-## 7. Anomaly Detection Rules (v1, rule-based)
+### 3.5 Web Dashboard (`apps/web`)
+- Framework: Next.js 16 with Turbopack and React 19.
+- Output: Standalone container build (`output: "standalone"`).
+- Security: HTTP Basic Auth gate in `apps/web/src/proxy.ts` protecting all pages and `/api/projects/**` routes. Unset `DASHBOARD_PASSWORD` fails closed with HTTP 503 in production.
+- Features: Project management, one-time API key display and rotation, Telegram group deep linking, incident drawer with AI/Rule-based badges and status transitions.
 
-- Any uncaught exception or unhandled rejection → immediate alert
-- 5xx error rate exceeding a threshold in a rolling window → alert
-- Repeated identical error (crash loop) within a short window → single deduplicated alert, not spam
+---
 
-## 8. Out of Scope (v1)
+## 4. End-to-End Data Flow
 
-- No distributed tracing
-- No custom metrics/dashboards beyond alert history
-- No multi-language SDKs at launch (Node.js only)
-- No team/multi-user accounts, single developer per project for now
+```text
+[Node.js Host Application]
+       │
+       ▼ (captures exception or rejection)
+[@samkiel/pulse-monitor SDK]
+       │
+       ▼ POST /api/v1/ingest (Header: X-Pulse-Api-Key)
+[Pulse Ingestion Engine]
+  ├── 1. Rate limiter check (120 req/min)
+  ├── 2. SHA-256 key hash lookup in PostgreSQL
+  ├── 3. Zod schema and payload boundary validation
+  ├── 4. Atomic Incident upsert by (projectId, fingerprint)
+  ├── 5. Debounce decision: decideAlert(existing, now, windowMs)
+  │
+  ├── [If Alert Required]
+  │      ├── Secret Scrubber (redacts keys, tokens, emails)
+  │      ├── AI Diagnostic Chain (Rumpty -> Fallback -> Heuristic)
+  │      └── Telegram Dispatch (sends formatted Markdown alert)
+  │
+  └── [Storage]
+         └── PostgreSQL (ErrorEvent, Incident, ApiKey)
+```
 
-## 9. Open Questions
+---
 
-- Exact rate limits/pricing on Rumpty AI Inference, confirm before heavy use
-- Whether Rumpty's personal API keys expose any additional endpoints beyond CLI use, worth a deeper check if time allows
+## 5. Deployment Options
+
+Pulse supports both Docker containerization and direct Node execution:
+- Container path: `apps/api/Dockerfile` and `apps/web/Dockerfile` with `docker-compose.prod.yml`.
+- Direct path: `pnpm build` followed by `pnpm start:api` and `pnpm start:web`.
+- Detailed deployment instructions are documented in `docs/DEPLOYMENT.md`.
