@@ -64,3 +64,4 @@ Trigger a connection failure heuristic:
 ```bash
 curl -X POST http://localhost:5000/db-fail
 ```
+
