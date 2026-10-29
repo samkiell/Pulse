@@ -1,11 +1,11 @@
-# pulse
+# @samkiel/pulse
 
 Lightweight Node.js error monitoring and crash alerting SDK for apps deployed on Rumpty Cloud.
 
 ## Installation
 
 ```bash
-npm install pulse
+npm install @samkiel/pulse
 ```
 
 ## Quickstart
@@ -13,7 +13,7 @@ npm install pulse
 Initialize at the very top of your entrypoint before any other imports or application logic:
 
 ```typescript
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 
 pulse.init({
   apiKey: process.env.PULSE_API_KEY!,
@@ -28,7 +28,7 @@ Attach the error handler at the end of your middleware chain, after all route de
 
 ```typescript
 import express from "express";
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 
 const app = express();
 
@@ -52,7 +52,7 @@ All other headers (such as `authorization` and `cookie`) are stripped before tra
 ## Manual Error Capture
 
 ```typescript
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 
 try {
   await executeJob();

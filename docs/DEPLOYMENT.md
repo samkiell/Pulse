@@ -1,6 +1,6 @@
 # Pulse Production Deployment Guide for Rumpty Cloud
 
-This guide provides instructions for deploying Pulse to Rumpty Cloud infrastructure. Pulse consists of an Ingest API (`apps/api`), a Web Dashboard (`apps/web`), a shared Prisma database layer (`packages/db`), and the client monitoring SDK (`pulse`).
+This guide provides instructions for deploying Pulse to Rumpty Cloud infrastructure. Pulse consists of an Ingest API (`apps/api`), a Web Dashboard (`apps/web`), a shared Prisma database layer (`packages/db`), and the client monitoring SDK (`@samkiel/pulse`).
 
 ---
 

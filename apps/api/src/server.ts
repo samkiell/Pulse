@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import http from "node:http";
 import { prisma } from "@pulse/db";
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 import { config, validateProductionConfig } from "./config";
 import { logger } from "./lib/logger";
 import { ingestRouter } from "./routes/ingest";

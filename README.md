@@ -66,17 +66,17 @@ flowchart TD
 ### 1. Install the SDK
 
 ```bash
-npm install pulse
+npm install @samkiel/pulse
 # or
-pnpm add pulse
+pnpm add @samkiel/pulse
 ```
 
 ### 2. Initialize in Your Application
 
-Initialize `pulse` at the earliest entry point before any other modules load:
+Initialize `@samkiel/pulse` at the earliest entry point before any other modules load:
 
 ```typescript
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 
 pulse.init({
   apiKey: process.env.PULSE_API_KEY || "",
@@ -92,7 +92,7 @@ Attach `pulse.errorHandler()` as an error middleware after your route definition
 
 ```typescript
 import express from "express";
-import pulse from "pulse";
+import pulse from "@samkiel/pulse";
 
 const app = express();
 

@@ -4,7 +4,7 @@
 
 Pulse is crash alerting and diagnostic observability infrastructure designed for applications deployed on Rumpty Cloud. It captures runtime errors, generates AI-assisted root-cause explanations, and delivers alerts to developers via Telegram while persisting incident history in a Next.js dashboard.
 
-Pulse is developer infrastructure integrated into client applications via `pulse`.
+Pulse is developer infrastructure integrated into client applications via `@samkiel/pulse`.
 
 ---
 
@@ -31,7 +31,7 @@ Pulse/
 │   └── web/          # Next.js 16 authenticated observability dashboard
 ├── packages/
 │   ├── db/           # Prisma 6 schema, baseline migrations, client singleton
-│   └── sdk/          # Client error tracking SDK (pulse)
+│   └── sdk/          # Client error tracking SDK (@samkiel/pulse)
 ├── examples/
 │   └── demo-app/     # Sample instrumented Express application
 └── docs/
@@ -39,7 +39,7 @@ Pulse/
 ```
 
 ### 3.1 SDK (`packages/sdk`)
-- Package name: `pulse`
+- Package name: `@samkiel/pulse`
 - Formats: CommonJS (`.js`), ES Modules (`.mjs`), TypeScript declarations (`.d.ts`)
 - Features:
   - Registers `uncaughtException` and `unhandledRejection` handlers once (idempotent `init`).
@@ -94,7 +94,7 @@ Pulse/
 [Node.js Host Application]
        │
        ▼ (captures exception or rejection)
-[pulse SDK]
+[@samkiel/pulse SDK]
        │
        ▼ POST /api/v1/ingest (Header: X-Pulse-Api-Key)
 [Pulse Ingestion Engine]

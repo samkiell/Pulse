@@ -1,6 +1,6 @@
 # Pulse Demo Application
 
-Sample Express application instrumented with `pulse` demonstrating crash and error telemetry capture.
+Sample Express application instrumented with `@samkiel/pulse` demonstrating crash and error telemetry capture.
 
 ## Setup
 
