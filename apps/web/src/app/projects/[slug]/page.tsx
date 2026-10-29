@@ -472,7 +472,7 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
               <div>
                 <h3 className="text-base font-semibold text-white">SDK Quickstart</h3>
                 <p className="text-xs text-[#a1a1aa] mt-1">
-                  Add <code>@samkiel/pulse-monitor</code> to your Node.js application deployed on Rumpty Cloud.
+                  Add <code>pulse</code> to your Node.js application deployed on Rumpty Cloud.
                 </p>
               </div>
 
@@ -536,9 +536,9 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
                 1. Install SDK
               </span>
               <div className="flex items-center justify-between bg-[#18181b] border border-[#27272a] rounded-lg p-3 font-mono text-xs text-white">
-                <code>npm install @samkiel/pulse-monitor</code>
+                <code>npm install pulse</code>
                 <button
-                  onClick={() => copyToClipboard("npm install @samkiel/pulse-monitor", "install")}
+                  onClick={() => copyToClipboard("npm install pulse", "install")}
                   className="hover:text-red-400 transition-colors"
                 >
                   <Copy className="w-4 h-4" />
@@ -555,7 +555,7 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      `import pulse from "@samkiel/pulse-monitor";\n\npulse.init({\n  apiKey: "${activeKeyDisplay}",\n  endpoint: "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ingest",\n  environment: process.env.NODE_ENV || "production"\n});`,
+                      `import pulse from "pulse";\n\npulse.init({\n  apiKey: "${activeKeyDisplay}",\n  endpoint: "${typeof window !== 'undefined' ? window.location.origin : ''}/api/v1/ingest",\n  environment: process.env.NODE_ENV || "production"\n});`,
                       "code-init"
                     )
                   }
@@ -563,7 +563,7 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
                 >
                   <Copy className="w-4 h-4" />
                 </button>
-                <pre>{`import pulse from "@samkiel/pulse-monitor";
+                <pre>{`import pulse from "pulse";
 
 // Initialize at the very top of your entrypoint
 pulse.init({

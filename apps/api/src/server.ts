@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import http from "node:http";
 import { prisma } from "@pulse/db";
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "pulse";
 import { config, validateProductionConfig } from "./config";
 import { logger } from "./lib/logger";
 import { ingestRouter } from "./routes/ingest";
@@ -22,7 +22,7 @@ if (config.pulseSelfApiKey && config.pulseEndpoint) {
     environment: config.nodeEnv,
     release: process.env.APP_VERSION || "v1.0.0",
   });
-  logger.info("Self-monitoring initialized via @samkiel/pulse-monitor");
+  logger.info("Self-monitoring initialized via pulse");
 }
 
 const app = express();

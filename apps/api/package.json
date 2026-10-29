@@ -13,7 +13,7 @@
   "dependencies": {
     "@prisma/client": "^6.4.1",
     "@pulse/db": "workspace:*",
-    "@samkiel/pulse-monitor": "workspace:*",
+    "pulse": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

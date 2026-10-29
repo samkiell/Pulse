@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "pulse";
 
 dotenv.config();
 

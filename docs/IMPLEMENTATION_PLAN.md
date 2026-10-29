@@ -10,7 +10,7 @@ Pulse/
 │   ├── api/               # Ingestion engine, anomaly detection, AI & Telegram workers (Express / Fastify)
 │   └── web/               # Next.js App Router, TailwindCSS, shadcn/ui dashboard
 ├── packages/
-│   └── sdk/               # Lightweight TypeScript/Node.js client library ('@samkiel/pulse-monitor')
+│   └── sdk/               # Lightweight TypeScript/Node.js client library ('pulse')
 ├── shared/                # Common TypeScript types, DB schemas, and validation schemas
 ├── docs/                  # Architectural specs and runbooks
 ├── docker-compose.yml     # Local Postgres for development
@@ -96,7 +96,7 @@ Pulse/
 - **Key Deliverables**:
   - Deploy Postgres instance on Rumpty Managed DB.
   - Deploy `apps/api` and `apps/web` via Rumpty Deployments.
-  - Deploy sample test app instrumented with `@samkiel/pulse-monitor` SDK.
+  - Deploy sample test app instrumented with `pulse` SDK.
   - Trigger intentional crashes (uncaught exception, rejected promise, crash loop) to verify Telegram delivery and AI diagnosis.
 
 ---

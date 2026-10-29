@@ -18,7 +18,7 @@ COPY packages/sdk ./packages/sdk
 COPY examples/demo-app ./examples/demo-app
 
 # Build sdk and demo-app
-RUN pnpm --filter @samkiel/pulse-monitor build
+RUN pnpm --filter pulse build
 RUN pnpm --filter @pulse/demo-app build
 
 # Runner stage

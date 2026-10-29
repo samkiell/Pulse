@@ -33,7 +33,7 @@ Solo developers and small engineering teams shipping applications on Rumpty Clou
 
 ## 6. User Stories
 
-- As a developer, I want to drop `@samkiel/pulse-monitor` into my app so that I do not need to build custom error tracking.
+- As a developer, I want to drop `pulse` into my app so that I do not need to build custom error tracking.
 - As a developer, I want a Telegram message the moment my app crashes so that I can respond before users notice.
 - As a developer, I want the alert to explain the likely cause and suggested fix so that I do not have to dig through raw logs.
 - As a developer, I want to see incident history on a dashboard so that I can track recurring bugs and manage resolution status.
@@ -42,7 +42,7 @@ Solo developers and small engineering teams shipping applications on Rumpty Clou
 
 | Feature | Scope | Status | Notes |
 |---|---|---|---|
-| Node.js SDK (`@samkiel/pulse-monitor`) | Must-have | Shipped | Auto-captures uncaught exceptions and rejections. Capped queue, timeout flush. |
+| Node.js SDK (`pulse`) | Must-have | Shipped | Auto-captures uncaught exceptions and rejections. Capped queue, timeout flush. |
 | Ingestion API & Rate Limiting | Must-have | Shipped | Express 4, Zod schema validation, 120 req/min rate limit, hashed key auth. |
 | Deterministic Fingerprinting & Deduplication | Must-have | Shipped | Normalized 16-character hex hash clustering identical stack frames. |
 | Multi-Provider AI Diagnosis | Must-have | Shipped | Rumpty AI -> Fallback LLM -> Rule-based heuristic with PII secret scrubber. |

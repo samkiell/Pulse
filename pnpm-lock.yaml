@@ -20,9 +20,6 @@ importers:
       '@pulse/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@samkiel/pulse-monitor':
-        specifier: workspace:*
-        version: link:../../packages/sdk
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -38,6 +35,9 @@ importers:
       helmet:
         specifier: 8.0.0
         version: 8.0.0
+      pulse:
+        specifier: workspace:*
+        version: link:../../packages/sdk
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -106,15 +106,15 @@ importers:
 
   examples/demo-app:
     dependencies:
-      '@samkiel/pulse-monitor':
-        specifier: workspace:*
-        version: link:../../packages/sdk
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
       express:
         specifier: ^4.21.2
         version: 4.22.3
+      pulse:
+        specifier: workspace:*
+        version: link:../../packages/sdk
     devDependencies:
       '@types/express':
         specifier: ^5.0.0

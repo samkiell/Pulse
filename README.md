@@ -25,7 +25,7 @@ When an application crashes or throws uncaught exceptions at runtime on Rumpty C
 
 ```mermaid
 flowchart TD
-    App["Node.js Application<br>(@samkiel/pulse-monitor)"] -->|"POST /api/v1/ingest (Batch & Retries)"| API["Pulse API Engine<br>(apps/api)"]
+    App["Node.js Application<br>(pulse)"] -->|"POST /api/v1/ingest (Batch & Retries)"| API["Pulse API Engine<br>(apps/api)"]
     
     subgraph Ingestion & Processing
         API --> Auth["Key Hashing & Rate Limiting"]
@@ -53,7 +53,7 @@ flowchart TD
 
 | Package / App | Purpose | Technology |
 |---|---|---|
-| [`packages/sdk`](./packages/sdk) | Client error telemetry SDK (`@samkiel/pulse-monitor`) | TypeScript, tsup (CJS, ESM, DTS) |
+| [`packages/sdk`](./packages/sdk) | Client error telemetry SDK (`pulse`) | TypeScript, tsup (CJS, ESM, DTS) |
 | [`packages/db`](./packages/db) | Database schema, migrations, and Prisma client | Prisma 6, PostgreSQL |
 | [`apps/api`](./apps/api) | High-throughput ingest API, deduplication, AI pipeline | Express 4, tsup, Zod |
 | [`apps/web`](./apps/web) | Authenticated incident dashboard and key management | Next.js 16 (Turbopack), TailwindCSS |
@@ -66,17 +66,17 @@ flowchart TD
 ### 1. Install the SDK
 
 ```bash
-npm install @samkiel/pulse-monitor
+npm install pulse
 # or
-pnpm add @samkiel/pulse-monitor
+pnpm add pulse
 ```
 
 ### 2. Initialize in Your Application
 
-Initialize `@samkiel/pulse-monitor` at the earliest entry point before any other modules load:
+Initialize `pulse` at the earliest entry point before any other modules load:
 
 ```typescript
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "pulse";
 
 pulse.init({
   apiKey: process.env.PULSE_API_KEY || "",
@@ -92,7 +92,7 @@ Attach `pulse.errorHandler()` as an error middleware after your route definition
 
 ```typescript
 import express from "express";
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "pulse";
 
 const app = express();
 
