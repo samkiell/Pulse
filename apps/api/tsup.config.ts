@@ -9,3 +9,4 @@ export default defineConfig({
   noExternal: ["@pulse/db"],
   external: ["@prisma/client"],
 });
+
