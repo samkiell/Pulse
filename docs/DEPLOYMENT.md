@@ -179,3 +179,4 @@ To verify end-to-end incident ingestion, AI diagnosis, and Telegram alerting:
 - **Symptom:** Rumpty Cloud marks deployment as failed with `Healthcheck polling failed on port`.
 - **Cause:** Application listening on `127.0.0.1` instead of `0.0.0.0`, or port mismatch between container setting and healthcheck URL.
 - **Remedy:** Ensure `HOSTNAME=0.0.0.0` is set for Web and the API listens on `0.0.0.0`. Check that the health check points to `/health` on port 3001 for API, and `/api/health` on port 3000 for Web.
+
