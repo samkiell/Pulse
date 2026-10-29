@@ -57,7 +57,7 @@ DATABASE_URL=postgresql://<USER>:<PASSWORD>@<HOST>:<PORT>/<DATABASE>?sslmode=req
 PUBLIC_API_URL=https://api.yourdomain.com
 DASHBOARD_URL=https://dashboard.yourdomain.com
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_BOT_USERNAME=PulseMonitorBot
+TELEGRAM_BOT_USERNAME=rumptypulsebot
 TELEGRAM_WEBHOOK_SECRET=generate_a_random_32_char_secret_string
 RUMPTY_AI_ENDPOINT=https://chat.rumptycloud.com/v1/chat/completions
 RUMPTY_AI_API_KEY=your_rumpty_inference_key

@@ -36,7 +36,7 @@ export async function POST(
     const botUsername =
       process.env.TELEGRAM_BOT_USERNAME ||
       process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
-      "PulseAlertBot";
+      "rumptypulsebot";
     const deepLink = `https://t.me/${botUsername}?start=${verificationToken}`;
 
     return NextResponse.json(

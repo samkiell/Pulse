@@ -141,7 +141,7 @@ pnpm --filter @pulse/api telegram:set-webhook
 5. Log in to the Pulse Dashboard, create or open a project, and navigate to the Telegram tab.
 6. Click the deep link to start the bot in your group or direct message chat:
    ```text
-   https://t.me/YourBotUsername?start=<ONE_TIME_TOKEN>
+   https://t.me/rumptypulsebot?start=<ONE_TIME_TOKEN>
    ```
 7. Send the `/start` command with the token to link the chat. Future incidents will trigger instant push notifications.
 
@@ -183,7 +183,7 @@ Pulse adheres to strict production security practices:
 | `AI_FALLBACK_API_KEY` | API | No | `""` | Optional secondary API key. |
 | `AI_FALLBACK_MODEL` | API | No | `""` | Optional secondary model identifier. |
 | `TELEGRAM_BOT_TOKEN` | API | Yes | `""` | Bot token from @BotFather. |
-| `TELEGRAM_BOT_USERNAME` | API / Web | No | `PulseMonitorBot` | Bot username handle without @. |
+| `TELEGRAM_BOT_USERNAME` | API / Web | No | `rumptypulsebot` | Bot username handle without @. |
 | `TELEGRAM_WEBHOOK_SECRET` | API | Yes | `""` | Shared secret token for webhook verification. |
 | `TELEGRAM_API_BASE` | API | No | `https://api.telegram.org` | Base URL for Telegram Bot API (customizable for testing). |
 

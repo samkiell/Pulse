@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     const botUsername =
       process.env.TELEGRAM_BOT_USERNAME ||
       process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
-      "PulseAlertBot";
+      "rumptypulsebot";
     const telegramDeepLink = `https://t.me/${botUsername}?start=${telegramToken}`;
 
     return NextResponse.json(

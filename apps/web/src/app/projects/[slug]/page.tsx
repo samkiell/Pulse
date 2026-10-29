@@ -636,7 +636,7 @@ app.use(pulse.errorHandler());`}</pre>
                   Open the Telegram link or search for the bot:
                   <div className="mt-2 flex items-center gap-3">
                     <a
-                      href={telegram?.deepLink || `https://t.me/PulseAlertBot?start=${telegram?.verificationToken}`}
+                      href={telegram?.deepLink || `https://t.me/rumptypulsebot?start=${telegram?.verificationToken}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"

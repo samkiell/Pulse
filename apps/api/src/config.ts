@@ -55,7 +55,7 @@ export const config = {
 
   // Telegram Bot
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || "PulseMonitorBot",
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || "rumptypulsebot",
   telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || "",
   telegramApiBase: process.env.TELEGRAM_API_BASE || "https://api.telegram.org",
 

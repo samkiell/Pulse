@@ -49,7 +49,7 @@ export async function GET(
     const botUsername =
       process.env.TELEGRAM_BOT_USERNAME ||
       process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
-      "PulseAlertBot";
+      "rumptypulsebot";
 
     const sanitizedProject = {
       ...project,
