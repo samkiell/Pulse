@@ -53,6 +53,7 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL || "",
   publicApiUrl: process.env.PUBLIC_API_URL || "http://localhost:4000",
   dashboardUrl: process.env.DASHBOARD_URL || "http://localhost:3000",
+  internalApiSecret: (process.env.INTERNAL_API_SECRET || "").trim(),
   corsOrigins: process.env.CORS_ORIGINS || "",
 
   // Rumpty AI Inference
