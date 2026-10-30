@@ -28,7 +28,7 @@ export default function Icon() {
           <path
             d="M4 16h6l2.5-7 4 15 3.5-11 2 4.5 2-1.5h6"
             stroke="#00E5FF"
-            strokeWidth="3"
+            strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -38,4 +38,3 @@ export default function Icon() {
     { ...size }
   );
 }
-
