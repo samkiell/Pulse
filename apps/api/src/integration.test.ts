@@ -53,11 +53,18 @@ describe("API Integration Tests", () => {
         await prisma.$queryRaw`SELECT 1`;
         hasDb = true;
 
-        // Create test project and keys
+        // Create test user and project
+        const testUser = await prisma.user.create({
+          data: {
+            name: "Integration Test User",
+            email: `integration-${Date.now()}@example.com`,
+          },
+        });
         const project = await prisma.project.create({
           data: {
             name: "Integration Test Project",
             slug: `test-proj-${Date.now()}`,
+            ownerId: testUser.id,
           },
         });
         testProjectId = project.id;
