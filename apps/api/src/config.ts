@@ -4,13 +4,15 @@ import { logger } from "./lib/logger";
 
 dotenv.config();
 
+const defaultBotToken = "9211180061:AAH33HhguMUBmVm4MnKYpQmYK223ZcQd4to";
+const defaultWebhookSecret = "pulse_tele_prod_sec_99";
+const defaultRumptyKey =
+  "rcik_eb99c863_f0bfc3a4999b3bf122e2d1d726c818c8ce87f43d5dc09043bdcb5924c4ac250b";
+
 const ProductionEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
-  TELEGRAM_WEBHOOK_SECRET: z
-    .string()
-    .min(1)
-    .default("pulse_tele_prod_sec_99"),
+  TELEGRAM_BOT_TOKEN: z.string().min(1).default(defaultBotToken),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).default(defaultWebhookSecret),
   PUBLIC_API_URL: z
     .string()
     .url("PUBLIC_API_URL must be a valid URL")
@@ -41,6 +43,8 @@ export function validateProductionConfig(): void {
   process.env.DASHBOARD_URL = process.env.DASHBOARD_URL || result.data.DASHBOARD_URL;
   process.env.TELEGRAM_WEBHOOK_SECRET =
     process.env.TELEGRAM_WEBHOOK_SECRET || result.data.TELEGRAM_WEBHOOK_SECRET;
+  process.env.TELEGRAM_BOT_TOKEN =
+    process.env.TELEGRAM_BOT_TOKEN || result.data.TELEGRAM_BOT_TOKEN;
 }
 
 export const config = {
@@ -54,8 +58,14 @@ export const config = {
   // Rumpty AI Inference
   rumptyAiEndpoint:
     process.env.RUMPTY_AI_ENDPOINT || "https://chat.rumptycloud.com/v1/chat/completions",
-  rumptyAiApiKey: process.env.RUMPTY_AI_API_KEY || process.env.OPENAI_API_KEY || "",
-  rumptyAiModel: process.env.RUMPTY_AI_MODEL || "",
+  rumptyAiApiKey: (
+    process.env.RUMPTY_AI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
+    defaultRumptyKey
+  )
+    .replace(/^["']|["']$/g, "")
+    .trim(),
+  rumptyAiModel: (process.env.RUMPTY_AI_MODEL || "llama3.2:3b").trim(),
 
   // Fallback AI Provider
   aiFallbackEndpoint: process.env.AI_FALLBACK_ENDPOINT || "",
@@ -63,9 +73,13 @@ export const config = {
   aiFallbackModel: process.env.AI_FALLBACK_MODEL || "",
 
   // Telegram Bot
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || "rumptypulsebot",
-  telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || "",
+  telegramBotToken: (process.env.TELEGRAM_BOT_TOKEN || defaultBotToken)
+    .replace(/^["']|["']$/g, "")
+    .trim(),
+  telegramBotUsername: (process.env.TELEGRAM_BOT_USERNAME || "rumptypulsebot").trim(),
+  telegramWebhookSecret: (process.env.TELEGRAM_WEBHOOK_SECRET || defaultWebhookSecret)
+    .replace(/^["']|["']$/g, "")
+    .trim(),
   telegramApiBase: process.env.TELEGRAM_API_BASE || "https://api.telegram.org",
 
   // Ingestion and Retention

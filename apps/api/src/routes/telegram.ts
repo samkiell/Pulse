@@ -47,3 +47,34 @@ telegramRouter.post(
     }
   }
 );
+
+telegramRouter.get("/debug", async (req: Request, res: Response): Promise<void> => {
+  const token = (config.telegramBotToken || "").replace(/^["']|["']$/g, "").trim();
+  let tgStatus = "unknown";
+  let botUsername = "";
+
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const data = (await r.json()) as any;
+    if (data.ok) {
+      tgStatus = "ok";
+      botUsername = data.result.username;
+    } else {
+      tgStatus = `error: ${data.description || r.status}`;
+    }
+  } catch (err: any) {
+    tgStatus = `fetch_failed: ${err.message}`;
+  }
+
+  res.status(200).json({
+    status: "online",
+    botConfigured: Boolean(token),
+    tokenPrefix: token.slice(0, 10),
+    botUsername,
+    tgStatus,
+    webhookSecretConfigured: Boolean(config.telegramWebhookSecret),
+    webhookSecretPrefix: (process.env.TELEGRAM_WEBHOOK_SECRET || config.telegramWebhookSecret).slice(0, 8),
+    rumptyAiConfigured: Boolean(config.rumptyAiApiKey),
+    version: "v1.0.4",
+  });
+});
