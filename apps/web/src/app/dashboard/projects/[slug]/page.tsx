@@ -97,6 +97,7 @@ export default async function ProjectDetailPage({
       chatId: t.chatId,
       chatTitle: t.chatTitle,
       verificationToken: t.verificationToken,
+      linkPin: t.linkPin,
       createdAt: t.createdAt,
       consumedAt: t.consumedAt,
       deepLink: `https://t.me/${botUsername}?start=${t.verificationToken}`,

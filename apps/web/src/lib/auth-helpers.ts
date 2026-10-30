@@ -42,8 +42,8 @@ export function generateProjectSlug(name: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 30) || "project";
 
-  const randomSuffix = crypto.randomBytes(2).toString("hex"); // 4 random chars
-  return `${base}-${randomSuffix}`;
+
+  return base;
 }
 
 export async function getCurrentUser() {

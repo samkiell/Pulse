@@ -3,7 +3,8 @@ import { config } from "../config";
 async function main() {
   const token = config.telegramBotToken;
   const secret = config.telegramWebhookSecret;
-  const publicApiUrl = config.publicApiUrl.replace(/\/$/, "");
+  const targetUrl = process.argv[2] || process.env.PUBLIC_API_URL || config.publicApiUrl;
+  const publicApiUrl = targetUrl.replace(/\/$/, "");
   const base = (config.telegramApiBase || "https://api.telegram.org").replace(/\/$/, "");
 
   if (!token) {

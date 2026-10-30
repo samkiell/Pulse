@@ -85,10 +85,22 @@ export async function POST(req: Request) {
     }
 
     const slug = generateProjectSlug(name);
+
+    const existingProject = await prisma.project.findUnique({
+      where: { slug },
+    });
+
+    if (existingProject) {
+      return NextResponse.json(
+        { error: `A project with the name "${name}" already exists.` },
+        { status: 409 }
+      );
+    }
     const rawApiKey = `pulse_live_${randomBytes(16).toString("hex")}`;
     const keyHash = hashKey(rawApiKey);
     const keyPrefix = rawApiKey.slice(0, 12);
     const telegramToken = `plink_${randomBytes(8).toString("hex")}`;
+    const linkPin = Math.floor(100000 + Math.random() * 900000).toString();
 
     const project = await prisma.project.create({
       data: {
@@ -105,6 +117,7 @@ export async function POST(req: Request) {
         telegramIntegrations: {
           create: {
             verificationToken: telegramToken,
+            linkPin,
           },
         },
       },
@@ -131,6 +144,7 @@ export async function POST(req: Request) {
         ...project,
         apiKey: rawApiKey,
         telegramDeepLink,
+        linkPin,
         ingestEndpoint,
       },
       { status: 201 }

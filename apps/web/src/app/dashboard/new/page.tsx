@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { CodeBlock } from "@/components/ui/CodeBlock";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { useToast } from "@/components/ui/Toast";
+import { QRCodeView } from "@/components/ui/QRCode";
+import { Badge } from "@/components/ui/Badge";
 import {
   CheckCircle2,
   ArrowRight,
@@ -19,6 +21,8 @@ import {
   Zap,
   ExternalLink,
   ShieldAlert,
+  Smartphone,
+  Hash,
 } from "lucide-react";
 
 export default function NewProjectWizard() {
@@ -37,12 +41,20 @@ export default function NewProjectWizard() {
     slug: string;
     apiKey: string;
     telegramDeepLink: string;
+    linkPin?: string;
     ingestEndpoint: string;
   } | null>(null);
 
   // Live polling state
   const [pollingActive, setPollingActive] = useState(false);
   const [firstIncident, setFirstIncident] = useState<{ id: string; title: string } | null>(null);
+  const [telegramStatus, setTelegramStatus] = useState<{
+    connected: boolean;
+    chatTitle?: string | null;
+    chatId?: string | null;
+  }>({ connected: false });
+  const [appConnected, setAppConnected] = useState(false);
+  const [appMeta, setAppMeta] = useState<any>(null);
   const [simulating, setSimulating] = useState(false);
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -73,9 +85,9 @@ export default function NewProjectWizard() {
     }
   };
 
-  // Poll for first incident when on Step 3
+  // Poll for Telegram link & App telemetry when on Step 3
   useEffect(() => {
-    if (step !== 3 || !createdProject || firstIncident) return;
+    if (step !== 3 || !createdProject) return;
 
     setPollingActive(true);
     const interval = setInterval(async () => {
@@ -83,17 +95,44 @@ export default function NewProjectWizard() {
         const res = await fetch(`/api/projects/${createdProject.slug}`);
         if (!res.ok) return;
         const projectData = await res.json();
+        const p = projectData.project || projectData;
 
-        if (projectData.incidents && projectData.incidents.length > 0) {
-          const inc = projectData.incidents[0];
+        // Check Telegram status
+        const tg = p?.telegramIntegrations?.[0];
+        if (tg && (tg.consumedAt || tg.chatId)) {
+          setTelegramStatus((prev) => {
+            if (!prev.connected) {
+              toast("Telegram alerts connected!", "success");
+            }
+            return {
+              connected: true,
+              chatTitle: tg.chatTitle,
+              chatId: tg.chatId,
+            };
+          });
+        }
+
+        // Check App / SDK heartbeat
+        if (p?.lastHeartbeatAt || (p?.incidents && p.incidents.length > 0)) {
+          setAppConnected((prev) => {
+            if (!prev) {
+              toast("App telemetry verified through SDK!", "success");
+            }
+            return true;
+          });
+          if (p.appMetadata) {
+            setAppMeta(p.appMetadata);
+          }
+        }
+
+        if (p?.incidents && p.incidents.length > 0 && !firstIncident) {
+          const inc = p.incidents[0];
           setFirstIncident({ id: inc.id, title: inc.title });
-          setPollingActive(false);
-          toast("First event received!", "success");
         }
       } catch (e) {
         // Continue polling
       }
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [step, createdProject, firstIncident, toast]);
@@ -249,7 +288,7 @@ app.use(pulse.errorHandler());`
       {/* Step 3: Link Telegram & Verify */}
       {step === 3 && createdProject && (
         <div className="flex flex-col gap-6">
-          <Card className="flex flex-col gap-5">
+          <Card className="flex flex-col gap-6">
             <div>
               <h2 className="text-sm font-semibold text-text">Connect Telegram Alerts (Optional)</h2>
               <p className="text-xs text-muted mt-0.5 leading-relaxed">
@@ -257,48 +296,109 @@ app.use(pulse.errorHandler());`
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 p-4 rounded-md bg-surface-2 border border-border">
-              <div className="w-10 h-10 rounded-full bg-[#2AABEE]/15 border border-[#2AABEE]/30 text-[#2AABEE] flex items-center justify-center shrink-0">
-                <Send className="w-5 h-5" />
+            {/* Telegram Link Card */}
+            {telegramStatus.connected ? (
+              <div className="p-4 rounded-lg bg-ok/10 border border-ok/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-ok/20 text-ok flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-ok flex items-center gap-1.5">
+                      Telegram Alerts Connected!
+                    </span>
+                    <p className="text-xs text-muted mt-0.5">
+                      Linked to: <strong className="text-text">{telegramStatus.chatTitle || "Chat"}</strong> ({telegramStatus.chatId})
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="ok">Live Alerts Active</Badge>
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-semibold text-text">Telegram Deep Link</span>
-                <p className="text-[11px] text-muted truncate">
-                  {createdProject.telegramDeepLink}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <CopyButton text={createdProject.telegramDeepLink} label="Copy Link" />
-                <a
-                  href={createdProject.telegramDeepLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white font-medium text-xs transition-colors"
-                >
-                  <span>Open Telegram</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </div>
-            </div>
+            ) : (
+              <div className="flex flex-col gap-4 p-4 rounded-lg bg-surface-2 border border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2AABEE] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#2AABEE]" />
+                    </span>
+                    <span className="text-xs font-bold text-text">Choose how to connect:</span>
+                  </div>
+                  <span className="text-[11px] text-muted font-mono">Waiting for link...</span>
+                </div>
 
-            {/* Waiting for first event panel */}
+                <div className="flex flex-col sm:flex-row items-center gap-5 pt-1">
+                  {/* QR Code */}
+                  <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    <QRCodeView text={createdProject.telegramDeepLink} size={125} />
+                    <span className="text-[11px] text-muted text-center flex items-center gap-1">
+                      <Smartphone className="w-3 h-3 text-[#2AABEE]" />
+                      <span>Scan with phone</span>
+                    </span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="hidden sm:flex flex-col items-center justify-center self-stretch py-2">
+                    <div className="w-px flex-1 bg-border" />
+                    <span className="text-[10px] text-muted uppercase font-bold py-1">OR</span>
+                    <div className="w-px flex-1 bg-border" />
+                  </div>
+
+                  {/* 6-Digit PIN & Direct Link */}
+                  <div className="flex-1 flex flex-col gap-3 w-full">
+                    {createdProject.linkPin && (
+                      <div className="p-3 rounded-md bg-surface border border-border flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-muted tracking-wider flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-cyan" />
+                            <span>6-Digit Pairing PIN</span>
+                          </span>
+                          <div className="text-lg font-mono font-bold text-cyan tracking-widest mt-0.5">
+                            {createdProject.linkPin.slice(0, 3)} {createdProject.linkPin.slice(3)}
+                          </div>
+                          <p className="text-[11px] text-muted mt-0.5">
+                            Send this PIN to <strong>@rumptypulsebot</strong>
+                          </p>
+                        </div>
+                        <CopyButton text={createdProject.linkPin} label="Copy PIN" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={createdProject.telegramDeepLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white font-medium text-xs transition-colors"
+                      >
+                        <span>Open Telegram Desktop</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <CopyButton text={createdProject.telegramDeepLink} label="Copy Link" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Application Health & Deployment Panel */}
             <div className="p-5 rounded-lg border border-border bg-bg flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="relative flex h-3 w-3">
-                    {pollingActive && !firstIncident && (
+                    {pollingActive && !appConnected && !firstIncident && (
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan opacity-75" />
                     )}
                     <span
                       className={`relative inline-flex rounded-full h-3 w-3 ${
-                        firstIncident ? "bg-ok" : "bg-cyan"
+                        appConnected || firstIncident ? "bg-ok" : "bg-cyan"
                       }`}
                     />
                   </span>
                   <span className="text-xs font-bold text-text">
-                    {firstIncident
-                      ? "Connected: First event received!"
-                      : "Waiting for your first event..."}
+                    {appConnected || firstIncident
+                      ? "App Connected: Deployment telemetry verified!"
+                      : "Waiting for app startup or crash events..."}
                   </span>
                 </div>
 
@@ -313,8 +413,17 @@ app.use(pulse.errorHandler());`
                 </Button>
               </div>
 
-              {firstIncident ? (
+              {appConnected && appMeta && (
                 <div className="p-3 rounded-md bg-ok/10 border border-ok/30 flex items-center justify-between text-xs text-ok">
+                  <span>
+                    Deployment verified: <strong>{appMeta.environment || "production"}</strong> ({appMeta.runtime || "Node.js"})
+                  </span>
+                  <span className="text-[11px] text-muted">Heartbeat active</span>
+                </div>
+              )}
+
+              {firstIncident && (
+                <div className="p-3 rounded-md bg-warning/10 border border-warning/30 flex items-center justify-between text-xs text-warning">
                   <span>Incident captured: {firstIncident.title}</span>
                   <Link
                     href={`/dashboard/projects/${createdProject.slug}/incidents/${firstIncident.id}`}
@@ -323,9 +432,11 @@ app.use(pulse.errorHandler());`
                     View Incident →
                   </Link>
                 </div>
-              ) : (
+              )}
+
+              {!appConnected && !firstIncident && (
                 <p className="text-xs text-muted leading-relaxed">
-                  Start your app or click &quot;Send test crash&quot; to test your pipeline. This panel polls every 3 seconds.
+                  Start your application with the SDK snippet from Step 2 (which sends a boot handshake), or click &quot;Send test crash&quot; to test your pipeline.
                 </p>
               )}
             </div>

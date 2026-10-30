@@ -171,25 +171,43 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
   const chatId = String(message.chat.id);
   const text = message.text.trim();
 
-  // Extract link token from multiple user formats:
-  // 1. /start plink_xxx or /connect plink_xxx
+  // Extract link token or 6-digit PIN from multiple user formats:
+  // 1. /start plink_xxx, /link plink_xxx, /link 123456
   // 2. Direct token paste: plink_xxx
+  // 3. Direct 6-digit PIN: "123456" or "123-456"
   const plinkMatch = text.match(/\b(plink_[a-zA-Z0-9_-]+)\b/i);
+  const cleanDigits = text.replace(/[-\s]/g, "");
+  const directPinMatch = cleanDigits.match(/\b\d{6}\b/);
+
   let explicitToken: string | null = null;
+  let explicitPin: string | null = null;
 
   if (text.startsWith("/start") || text.startsWith("/connect") || text.startsWith("/link")) {
     const parts = text.split(/\s+/);
-    if (parts[1]?.trim()) {
-      explicitToken = parts[1].trim();
+    const candidate = parts[1]?.trim();
+    if (candidate) {
+      const candidateDigits = candidate.replace(/[-\s]/g, "");
+      if (/^\d{6}$/.test(candidateDigits)) {
+        explicitPin = candidateDigits;
+      } else {
+        explicitToken = candidate;
+      }
     }
   } else if (plinkMatch) {
     explicitToken = plinkMatch[1];
+  } else if (directPinMatch && cleanDigits.length <= 8) {
+    explicitPin = directPinMatch[0];
   }
 
   // 1. Handle token verification and chat linking
-  if (explicitToken) {
-    const integration = await prisma.telegramIntegration.findUnique({
-      where: { verificationToken: explicitToken },
+  if (explicitToken || explicitPin) {
+    const integration = await prisma.telegramIntegration.findFirst({
+      where: {
+        OR: [
+          ...(explicitToken ? [{ verificationToken: explicitToken }] : []),
+          ...(explicitPin ? [{ linkPin: explicitPin }] : []),
+        ],
+      },
       include: { project: true },
     });
 

@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { QRCodeView } from "@/components/ui/QRCode";
 import {
   AlertTriangle,
   RotateCw,
@@ -54,6 +55,7 @@ export interface ProjectData {
     chatId: string | null;
     chatTitle: string | null;
     verificationToken: string;
+    linkPin?: string | null;
     createdAt: Date | string;
     consumedAt: Date | string | null;
     deepLink: string;
@@ -93,6 +95,7 @@ export function ProjectTabsClient({ project }: { project: ProjectData }) {
   // Telegram Integration State
   const [generatingTelegramToken, setGeneratingTelegramToken] = useState(false);
   const [newTelegramLink, setNewTelegramLink] = useState<string | null>(null);
+  const [newTelegramPin, setNewTelegramPin] = useState<string | null>(null);
   const [integrationsList, setIntegrationsList] = useState(project.integrations);
 
   // Settings State
@@ -148,6 +151,7 @@ export function ProjectTabsClient({ project }: { project: ProjectData }) {
       if (!res.ok) throw new Error("Failed to generate token");
       const data = await res.json();
       setNewTelegramLink(data.deepLink);
+      setNewTelegramPin(data.linkPin || null);
       setIntegrationsList((prev) => [data, ...prev]);
       toast("Fresh Telegram deep link generated (valid 24h)", "success");
     } catch (err: any) {
@@ -276,8 +280,20 @@ pulse.captureException(new Error("Database connection timeout"), {
             }
           >
             <StatusDot status={project.connectionStatus} />
-            <span>{project.connectionStatus}</span>
+            <span>SDK: {project.connectionStatus === "Connected" ? "Active" : project.connectionStatus}</span>
           </Badge>
+
+          {(() => {
+            const activeTelegram = integrationsList.find((i) => i.chatId && i.consumedAt);
+            return (
+              <Badge variant={activeTelegram ? "ok" : "warning"}>
+                <Send className="w-3 h-3 mr-1 text-[#2AABEE]" />
+                <span>
+                  Telegram: {activeTelegram ? (activeTelegram.chatTitle || "Linked") : "Not Linked"}
+                </span>
+              </Badge>
+            );
+          })()}
         </div>
 
         <div className="flex items-center gap-2">
@@ -621,22 +637,44 @@ pulse.captureException(new Error("Database connection timeout"), {
             />
 
             {newTelegramLink && (
-              <div className="p-4 rounded-md bg-surface-2 border border-border flex flex-col gap-2 mb-5">
-                <span className="text-xs font-bold text-text">New Single-Use Deep Link (Valid 24h):</span>
-                <div className="flex items-center justify-between p-2 rounded bg-surface border border-border text-xs font-mono text-cyan overflow-x-auto">
-                  <span className="truncate mr-2">{newTelegramLink}</span>
-                  <CopyButton text={newTelegramLink} label="Copy Link" />
+              <div className="p-4 rounded-md bg-surface-2 border border-border flex flex-col gap-4 mb-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-text">Connect New Telegram Chat:</span>
+                  <span className="text-[11px] text-muted font-mono">Valid 24h</span>
                 </div>
-                <div className="flex items-center justify-end pt-1">
-                  <a
-                    href={newTelegramLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-cyan hover:underline"
-                  >
-                    <span>Open in Telegram</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    <QRCodeView text={newTelegramLink} size={110} />
+                    <span className="text-[10px] text-muted">Scan with phone</span>
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-3 w-full">
+                    {newTelegramPin && (
+                      <div className="p-2.5 rounded bg-surface border border-border flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-muted">6-Digit PIN</span>
+                          <div className="text-base font-mono font-bold text-cyan tracking-wider">
+                            {newTelegramPin.slice(0, 3)} {newTelegramPin.slice(3)}
+                          </div>
+                        </div>
+                        <CopyButton text={newTelegramPin} label="Copy PIN" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={newTelegramLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white font-medium text-xs transition-colors"
+                      >
+                        <span>Open in Telegram</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <CopyButton text={newTelegramLink} label="Copy Link" />
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

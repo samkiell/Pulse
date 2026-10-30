@@ -28,6 +28,9 @@ telegramRouter.post(
       !expectedSecret ||
       !safeCompare(String(incomingSecret), expectedSecret)
     ) {
+      console.warn(
+        `[Telegram Webhook] Unauthorized request. Missing or mismatched secret token header.`
+      );
       res.status(401).send("Unauthorized");
       return;
     }
@@ -35,6 +38,11 @@ telegramRouter.post(
     try {
       const update = req.body;
       if (update && typeof update === "object" && Object.keys(update).length > 0) {
+        if (update.message) {
+          console.log(
+            `[Telegram Webhook] Message from chat ${update.message.chat?.id} (@${update.message.from?.username || "unknown"}): "${update.message.text}"`
+          );
+        }
         await handleTelegramUpdate(update);
       }
       res.status(200).send("OK");

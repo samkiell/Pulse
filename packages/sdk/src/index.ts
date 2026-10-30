@@ -89,6 +89,7 @@ export class PulseClient {
       }
 
       this.startPeriodicFlush();
+    this.sendStartupHeartbeat();
       this.initialized = true;
 
       if (this.config.debug) {
@@ -151,6 +152,43 @@ export class PulseClient {
    * Express / Connect error handling middleware.
    * Usage: app.use(pulse.errorHandler())
    */
+  public async ping(): Promise<boolean> {
+    if (!this.config.apiKey || !this.config.endpoint) {
+      return false;
+    }
+    try {
+      const base = this.config.endpoint
+        .replace(/\/api\/v1\/ingest\/?$/, "")
+        .replace(/\/$/, "");
+      const heartbeatUrl = `${base}/api/v1/heartbeat`;
+
+      const response = await fetch(heartbeatUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Pulse-API-Key": this.config.apiKey,
+        },
+        body: JSON.stringify({
+          environment: this.config.environment,
+          release: this.config.release,
+          sdkVersion: "1.0.0",
+          runtime:
+            typeof process !== "undefined" && process.version
+              ? `node:${process.version}`
+              : "node",
+          timestamp: new Date().toISOString(),
+        }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private sendStartupHeartbeat(): void {
+    void this.ping().catch(() => {});
+  }
+
   public errorHandler() {
     return (err: any, req: any, res: any, next: (err?: any) => void) => {
       try {

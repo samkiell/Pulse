@@ -39,21 +39,21 @@ describe("Unit Tests: Auth Helpers & Business Logic", () => {
   describe("Slug Generation", () => {
     test("generates kebab-case slug with 4 random characters", () => {
       const slug = generateProjectSlug("My Cool App");
-      assert.ok(slug.startsWith("my-cool-app-"));
-      const parts = slug.split("-");
-      const suffix = parts[parts.length - 1];
-      assert.strictEqual(suffix.length, 4);
+      assert.strictEqual(slug, "my-cool-app");
+
+
+
     });
 
     test("cleans symbols, emojis and trailing dashes", () => {
       const slug = generateProjectSlug("$$$ Super #1 Project !!!");
-      assert.ok(slug.startsWith("super-1-project-"));
+      assert.strictEqual(slug, "super-1-project");
       assert.match(slug, /^[a-z0-9-]+$/);
     });
 
     test("handles empty or blank name gracefully", () => {
       const slug = generateProjectSlug("   ");
-      assert.ok(slug.startsWith("project-"));
+      assert.strictEqual(slug, "project");
     });
   });
 

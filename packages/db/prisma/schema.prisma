@@ -82,6 +82,8 @@ model Project {
   owner                User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  lastHeartbeatAt      DateTime?
+  appMetadata          Json?
   apiKeys              ApiKey[]
   telegramIntegrations TelegramIntegration[]
   errorEvents          ErrorEvent[]
@@ -111,12 +113,14 @@ model TelegramIntegration {
   chatId            String?
   chatTitle         String?
   verificationToken String    @unique
+  linkPin           String?
   consumedAt        DateTime?
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   @@index([verificationToken])
+  @@index([linkPin])
   @@index([projectId])
 }
 

@@ -59,13 +59,15 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Generate fresh single-use verification token valid for 24h
+    // Generate fresh single-use verification token and short 6-digit PIN valid for 24h
     const verificationToken = `plink_${randomBytes(8).toString("hex")}`;
+    const linkPin = Math.floor(100000 + Math.random() * 900000).toString();
 
     const integration = await prisma.telegramIntegration.create({
       data: {
         projectId: project.id,
         verificationToken,
+        linkPin,
       },
     });
 
@@ -79,6 +81,7 @@ export async function POST(
       {
         id: integration.id,
         verificationToken: integration.verificationToken,
+        linkPin: integration.linkPin,
         deepLink,
         botUsername,
         createdAt: integration.createdAt,
