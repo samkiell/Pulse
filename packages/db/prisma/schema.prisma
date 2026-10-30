@@ -8,16 +8,86 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  projects      Project[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model Project {
   id                   String                @id @default(cuid())
   name                 String
   slug                 String                @unique
+  ownerId              String
+  owner                User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   apiKeys              ApiKey[]
   telegramIntegrations TelegramIntegration[]
   errorEvents          ErrorEvent[]
   incidents            Incident[]
+
+  @@index([ownerId])
 }
 
 model ApiKey {
@@ -30,6 +100,8 @@ model ApiKey {
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
   isActive   Boolean   @default(true)
+
+  @@index([projectId])
 }
 
 model TelegramIntegration {
@@ -75,7 +147,7 @@ model ErrorEvent {
   projectId   String
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   incidentId  String?
-  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  incident    Incident? @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   fingerprint String
   errorType   String // uncaughtException, unhandledRejection, middleware, custom
   name        String
