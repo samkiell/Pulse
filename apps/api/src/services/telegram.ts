@@ -40,7 +40,7 @@ export async function sendTelegramAlert(
     return;
   }
 
-  const incidentUrl = `${config.dashboardUrl}/projects/${payload.projectSlug}?incident=${payload.incidentId}`;
+  const incidentUrl = `${config.dashboardUrl}/dashboard/projects/${payload.projectSlug}/incidents/${payload.incidentId}`;
   const aiHeading = payload.isRuleBased ? "Likely cause (rule-based):" : "AI root cause:";
 
   const messageText = `🚨 <b>Pulse Crash Alert</b>
@@ -328,8 +328,7 @@ You can chat with me directly! Ask me questions about debugging, error resolutio
             orderBy: { lastSeenAt: "desc" },
             take: 3,
             select: {
-              errorName: true,
-              errorMessage: true,
+              title: true,
               status: true,
               occurrenceCount: true,
             },
@@ -347,7 +346,7 @@ You can chat with me directly! Ask me questions about debugging, error resolutio
       const incidentsList = item.project.incidents
         .map(
           (inc) =>
-            `- ${inc.errorName} (${inc.status}, ${inc.occurrenceCount}x): ${inc.errorMessage.slice(0, 100)}`
+            `- ${inc.title} (${inc.status}, ${inc.occurrenceCount}x)`
         )
         .join("\n");
       return `Project "${item.project.name}":\n${incidentsList || "No recent incidents recorded."}`;
