@@ -8,10 +8,10 @@ import { ArrowLeft, ArrowRight, BookOpen } from "lucide-react";
 export default async function DocsPage() {
   const session = await auth();
 
-  const installCode = `npm install @samkiel/pulse-monitor`;
+  const installCode = `npm install @samkiel/pulse`;
 
   const expressSnippet = `import express from "express";
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "@samkiel/pulse";
 
 const app = express();
 
@@ -36,7 +36,7 @@ app.listen(3000, () => {
   console.log("Server running on port 3000");
 });`;
 
-  const manualCaptureSnippet = `import pulse from "@samkiel/pulse-monitor";
+  const manualCaptureSnippet = `import pulse from "@samkiel/pulse";
 
 try {
   await processPayment(orderId);
