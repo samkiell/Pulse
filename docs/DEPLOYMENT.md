@@ -25,6 +25,7 @@ Because Rumpty Cloud configuration options can vary by region or account tier, v
 3. **Inference Endpoint Model ID:** Query `GET https://chat.rumptycloud.com/v1/models` using your Rumpty AI API key to identify the exact active model identifier for `RUMPTY_AI_MODEL`.
 4. **Build Memory Allocation:** Next.js and Prisma client generation require at least 1 GB of build memory. If builds exceed limits, ensure standalone output and caching are utilized.
 5. **Private Networking vs Public DNS:** Determine whether services communicate over internal container hostnames (e.g. `http://api:3001`) or through public routing URLs (`https://api.yourdomain.com`).
+6. **Monorepo Build Context & Root Directory:** When building with Dockerfile in a monorepo, leave Root directory empty (or `/` or `.`). If Root directory is set to a subdirectory (like `apps/web`), Rumpty restricts the Docker build context to that subdirectory, making shared workspace packages inaccessible. The repository root `Dockerfile` handles building the full monorepo and automatically dispatches to the correct service based on port or start command.
 
 ---
 
@@ -67,15 +68,17 @@ RETENTION_DAYS=30
 ```
 
 ### Option A: Dockerfile Deployment (Recommended)
-- Dockerfile path: `apps/api/Dockerfile`
-- Context: Repository root (`.`)
+- Root directory: Leave empty (or `/` or `.`). Rumpty auto-discovers the root `Dockerfile` and builds from the repository root.
+- Start command: Optional (default dispatcher detects `PORT=3001` or run `node apps/api/dist/server.js`)
 - Healthcheck endpoint: `/health` (responds 200 `{ status: "ok" }`)
 - Readiness endpoint: `/ready` (executes `SELECT 1` on database)
+- Port: `3001`
 
-### Option B: Native Build and Start
-- Install command: `pnpm install --frozen-lockfile=false`
+### Option B: Native Build and Start (Auto mode)
+- Root directory: Leave empty
 - Build command: `pnpm --filter @pulse/db generate && pnpm --filter @pulse/api build`
 - Start command: `node apps/api/dist/server.js`
+- Port: `3001`
 
 ---
 
@@ -117,14 +120,17 @@ INTERNAL_INGEST_URL=https://api.yourdomain.com/api/v1/ingest
 > **Security Rule:** If `DASHBOARD_PASSWORD` is omitted in production, the dashboard fails closed with HTTP 503 on all routes except `/api/health`.
 
 ### Option A: Dockerfile Deployment (Recommended)
-- Dockerfile path: `apps/web/Dockerfile`
-- Context: Repository root (`.`)
+- Root directory: Leave empty (or `/` or `.`). Rumpty auto-discovers the root `Dockerfile` and builds from the repository root.
+- Start command: Optional (default dispatcher detects `PORT=3000` or run `node apps/web/server.js`)
 - Healthcheck endpoint: `/api/health`
+- Port: `3000`
 
-### Option B: Native Build and Start
+### Option B: Native Build and Start (Auto mode)
+- Root directory: Leave empty
 - Install command: `pnpm install --frozen-lockfile=false`
 - Build command: `pnpm --filter @pulse/db generate && pnpm --filter @pulse/web build`
 - Start command: `pnpm --filter @pulse/web start`
+- Port: `3000`
 
 ---
 

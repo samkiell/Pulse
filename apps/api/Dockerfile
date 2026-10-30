@@ -24,7 +24,7 @@ COPY apps/api ./apps/api
 
 # Generate Prisma client and build packages
 RUN pnpm --filter @pulse/db generate
-RUN pnpm --filter pulse build
+RUN pnpm --filter @samkiel/pulse build
 RUN pnpm --filter @pulse/api build
 
 # Runner stage
