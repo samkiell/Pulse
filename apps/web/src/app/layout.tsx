@@ -33,6 +33,13 @@ export const metadata: Metadata = {
     description:
       "Know when your Rumpty app crashes, before your users tell you. Pulse sends a Telegram alert with the likely cause and a suggested fix.",
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({
