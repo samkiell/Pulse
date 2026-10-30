@@ -8,8 +8,8 @@ import { ArrowRight, CheckCircle2, Shield, Cpu, Layers, Terminal, Sparkles } fro
 export default async function LandingPage() {
   const session = await auth();
 
-  const installCode = `npm install @samkiel/pulse-monitor`;
-  const initCode = `import pulse from "@samkiel/pulse-monitor";
+  const installCode = `npm install @samkiel/pulse`;
+  const initCode = `import pulse from "@samkiel/pulse";
 
 pulse.init({
   apiKey: process.env.PULSE_API_KEY!,
