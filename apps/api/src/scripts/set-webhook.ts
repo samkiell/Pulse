@@ -1,4 +1,5 @@
 import { config } from "../config";
+import { registerTelegramCommands } from "../services/telegram";
 
 async function main() {
   const token = config.telegramBotToken;
@@ -43,6 +44,10 @@ async function main() {
   const infoRes = await fetch(getInfoUrl);
   const infoResult = await infoRes.json();
   console.log("getWebhookInfo response:", JSON.stringify(infoResult, null, 2));
+
+  console.log("Registering Telegram bot command menu...");
+  const cmdSuccess = await registerTelegramCommands();
+  console.log(`setMyCommands result: ${cmdSuccess ? "SUCCESS" : "FAILED"}`);
 }
 
 main().catch((err) => {

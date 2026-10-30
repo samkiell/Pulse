@@ -178,13 +178,15 @@ async function callLlmProvider(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-  const systemPrompt = `You are Pulse AI, an expert systems and runtime debugger for Node.js apps.
-Analyze the provided error, stack trace, and context.
-Respond ONLY with a complete, closed JSON object without markdown code fences or conversational text:
-{
-  "diagnosis": "A crisp, 1-2 sentence root cause explanation (max 500 chars).",
-  "suggestedFix": "Precise, actionable code snippet or configuration change to fix the issue (max 800 chars)."
-}`;
+  const systemPrompt = `You are Pulse AI, an elite runtime debugger built by SAMKIEL (samkiel.dev).
+Analyze the runtime error and stack trace.
+RULES:
+- diagnosis: 1 punchy, accurate sentence explaining the exact root cause. No conversational filler.
+- suggestedFix: 1 line of actionable code or terminal command to fix it.
+- NEVER use em dashes (— or –). Use hyphens (-) instead.
+- Max 160 chars for diagnosis, max 200 chars for suggestedFix.
+Output ONLY a single valid JSON object without markdown fences:
+{"diagnosis":"...","suggestedFix":"..."}`;
 
   try {
     const response = await fetch(endpoint, {
@@ -199,8 +201,8 @@ Respond ONLY with a complete, closed JSON object without markdown code fences or
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.2,
-        max_tokens: 1000,
+        temperature: 0.1,
+        max_tokens: 250,
         stream: false,
       }),
       signal: controller.signal,
@@ -358,6 +360,19 @@ export function generateRuleBasedDiagnosis(
   };
 }
 
+export const PULSE_AI_CHAT_SYSTEM_PROMPT = `You are Pulse, an elite runtime observability assistant built by SAMKIEL (samkiel.dev).
+You help developers monitor crashes, troubleshoot bugs, and understand system errors.
+
+CRITICAL STYLE & TONE RULES:
+- Talk like a sharp senior engineer texting: direct, casual, smart, and punchy.
+- NEVER use em dashes (—) or en dashes (–). Use standard commas, periods, or simple hyphens (-) instead.
+- KEEP REPLIES SHORT: Maximum 1 to 2 short sentences (under 240 characters). Never output long paragraphs or textbook lectures.
+- No robotic apologies ("I apologize for the inconvenience", "As an AI...").
+- If the user greets (yo, hi, hey, beans): reply naturally like a homie: "yo! pulse is listening. what are we debugging today?"
+- If asked who made you or about Pulse: "built by SAMKIEL (samkiel.dev) to catch runtime crashes before users notice."
+- If asked about an error or project: pinpoint the exact issue in 1 sentence with a 1-line fix.
+- Formatting: Use simple Telegram HTML (<b>bold</b>, <code>code</code>) sparingly. Never use markdown code blocks or bulleted lists.`;
+
 /**
  * Queries Rumpty AI chat completions for conversational interactions in Telegram or dashboard.
  */
@@ -370,11 +385,11 @@ export async function queryRumptyAiChat(
   const model = config.rumptyAiModel || "llama3.2:3b";
 
   if (!apiKey) {
-    return "Pulse AI is running in standalone mode. To enable full AI chat and diagnoses, configure RUMPTY_AI_API_KEY in your environment.";
+    return "Pulse AI is in standalone mode. Configure RUMPTY_AI_API_KEY to enable chat.";
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch(endpoint, {
@@ -388,15 +403,15 @@ export async function queryRumptyAiChat(
         messages: [
           {
             role: "system",
-            content:
-              systemPrompt ||
-              "You are Pulse AI, an intelligent DevOps, observability, and debugging assistant developed by SAMKIEL and powered by Rumpty Cloud. You help developers troubleshoot runtime errors, analyze logs, and optimize application resilience. Keep your answers concise, direct, technical, and under 1200 characters.",
+            content: systemPrompt || PULSE_AI_CHAT_SYSTEM_PROMPT,
           },
           {
             role: "user",
             content: userPrompt,
           },
         ],
+        temperature: 0.3,
+        max_tokens: 120,
       }),
       signal: controller.signal,
     });
@@ -405,18 +420,20 @@ export async function queryRumptyAiChat(
 
     if (!response.ok) {
       console.warn(`[Pulse AI Chat] Inference error: HTTP ${response.status}`);
-      return "Pulse AI is temporarily unavailable. Please try again in a few moments.";
+      return "Pulse AI is temporarily unavailable. Check back in a sec.";
     }
 
     const data = (await response.json()) as any;
-    const content = data?.choices?.[0]?.message?.content?.trim();
-    return (
-      content ||
-      "I received your message, but no response was generated. How can I assist you with your application errors?"
-    );
+    const rawContent = data?.choices?.[0]?.message?.content?.trim();
+    if (!rawContent) {
+      return "Pulse is listening. What are we debugging?";
+    }
+
+    // Clean em dashes and enforce short punchy format
+    return rawContent.replace(/[\u2014\u2013]/g, "-").trim();
   } catch (error: any) {
     clearTimeout(timeoutId);
     console.warn(`[Pulse AI Chat] Request error:`, error?.message || error);
-    return "Pulse AI request timed out or encountered an error. Please try again.";
+    return "Pulse AI request timed out. Please try again.";
   }
 }

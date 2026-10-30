@@ -12,6 +12,7 @@ import { heartbeatRouter } from "./routes/heartbeat";
 import { internalRouter } from "./routes/internal";
 import { inFlightAlerts } from "./services/anomaly";
 import { startRetentionSchedule } from "./services/retention";
+import { registerTelegramCommands } from "./services/telegram";
 
 // Validate required production environment variables
 validateProductionConfig();
@@ -104,6 +105,14 @@ let retentionTimer: NodeJS.Timeout | null = null;
 if (process.env.NODE_ENV !== "test") {
   // Start background retention scheduler (runs on startup and every 24h)
   retentionTimer = startRetentionSchedule();
+
+  if (config.telegramBotToken) {
+    registerTelegramCommands().catch((err) => {
+      logger.warn("Failed to register Telegram bot commands on startup", {
+        error: err?.message || String(err),
+      });
+    });
+  }
 
   server = app.listen(config.port, () => {
     logger.info("Pulse API running", {
