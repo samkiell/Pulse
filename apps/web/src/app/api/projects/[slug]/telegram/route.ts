@@ -1,112 +1,44 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
 import { randomBytes } from "node:crypto";
+import { requireApiUser, getOwnedProject } from "@/lib/auth-helpers";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
+
     const { slug } = await params;
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      include: {
-        telegramIntegrations: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-      },
-    });
+    const project = await getOwnedProject(user.id, slug);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const integration = project.telegramIntegrations[0] || null;
+    const integrations = await prisma.telegramIntegration.findMany({
+      where: { projectId: project.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const botUsername =
+      process.env.TELEGRAM_BOT_USERNAME ||
+      process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
+      "rumptypulsebot";
+
     return NextResponse.json({
-      connected: Boolean(integration?.chatId && integration?.isActive),
-      integration,
+      botUsername,
+      integrations: integrations.map((i) => ({
+        ...i,
+        deepLink: `https://t.me/${botUsername}?start=${i.verificationToken}`,
+      })),
     });
   } catch (error) {
-    console.error("[API get telegram integration GET]", error);
+    console.error("[API get telegram integrations GET]", error);
     return NextResponse.json(
       { error: "Failed to fetch Telegram integration status" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ slug: string }> }
-) {
-  try {
-    const { slug } = await params;
-    const body = await req.json();
-    const { chatId, chatTitle, verificationToken } = body;
-
-    if (!chatId && !verificationToken) {
-      return NextResponse.json(
-        { error: "chatId or verificationToken is required" },
-        { status: 400 }
-      );
-    }
-
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      include: { telegramIntegrations: true },
-    });
-
-    if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
-    let integration;
-
-    if (verificationToken) {
-      integration = await prisma.telegramIntegration.findUnique({
-        where: { verificationToken },
-      });
-      if (!integration || integration.projectId !== project.id) {
-        return NextResponse.json({ error: "Invalid verification token" }, { status: 404 });
-      }
-    } else {
-      integration = project.telegramIntegrations[0];
-    }
-
-    const cleanChatId = String(chatId).trim();
-
-    if (integration) {
-      integration = await prisma.telegramIntegration.update({
-        where: { id: integration.id },
-        data: {
-          chatId: cleanChatId,
-          chatTitle: chatTitle || "Direct Chat",
-          isActive: true,
-          consumedAt: new Date(),
-        },
-      });
-    } else {
-      integration = await prisma.telegramIntegration.create({
-        data: {
-          projectId: project.id,
-          chatId: cleanChatId,
-          chatTitle: chatTitle || "Direct Chat",
-          verificationToken: `plink_${randomBytes(8).toString("hex")}`,
-          isActive: true,
-          consumedAt: new Date(),
-        },
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      integration,
-    });
-  } catch (error) {
-    console.error("[API update telegram integration PATCH]", error);
-    return NextResponse.json(
-      { error: "Failed to update Telegram integration" },
       { status: 500 }
     );
   }
@@ -117,29 +49,23 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = await params;
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
 
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
+    const { slug } = await params;
+    const project = await getOwnedProject(user.id, slug);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Generate fresh single-use verification token valid for 24h
     const verificationToken = `plink_${randomBytes(8).toString("hex")}`;
 
     const integration = await prisma.telegramIntegration.create({
       data: {
         projectId: project.id,
         verificationToken,
-      },
-      select: {
-        id: true,
-        verificationToken: true,
-        createdAt: true,
-        isActive: true,
       },
     });
 
@@ -154,6 +80,7 @@ export async function POST(
         id: integration.id,
         verificationToken: integration.verificationToken,
         deepLink,
+        botUsername,
         createdAt: integration.createdAt,
       },
       { status: 201 }
@@ -161,5 +88,47 @@ export async function POST(
   } catch (error) {
     console.error("[API create telegram token POST]", error);
     return NextResponse.json({ error: "Failed to generate Telegram token" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
+
+    const { slug } = await params;
+    const project = await getOwnedProject(user.id, slug);
+
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const integrationId = searchParams.get("id");
+
+    if (!integrationId) {
+      return NextResponse.json({ error: "Integration ID is required" }, { status: 400 });
+    }
+
+    // Ensure integration belongs to this project
+    const integration = await prisma.telegramIntegration.findFirst({
+      where: { id: integrationId, projectId: project.id },
+    });
+
+    if (!integration) {
+      return NextResponse.json({ error: "Integration not found" }, { status: 404 });
+    }
+
+    await prisma.telegramIntegration.delete({
+      where: { id: integration.id },
+    });
+
+    return NextResponse.json({ success: true, message: "Chat unlinked successfully" });
+  } catch (error) {
+    console.error("[API delete telegram integration DELETE]", error);
+    return NextResponse.json({ error: "Failed to unlink chat" }, { status: 500 });
   }
 }
