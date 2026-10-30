@@ -6,10 +6,10 @@ if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
 
-# Run database migrations if DATABASE_URL is configured
+# Run database schema synchronization if DATABASE_URL is configured
 if [ -n "$DATABASE_URL" ]; then
-  echo "[Pulse] Checking database migrations..."
-  npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma || true
+  echo "[Pulse] Synchronizing database schema..."
+  npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate || true
 fi
 
 # Automatic service detection based on port or environment flags
