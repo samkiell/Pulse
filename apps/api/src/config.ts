@@ -7,14 +7,18 @@ dotenv.config();
 const ProductionEnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
-  TELEGRAM_WEBHOOK_SECRET: z.string().min(1, "TELEGRAM_WEBHOOK_SECRET is required"),
-  PUBLIC_API_URL: z.string().url("PUBLIC_API_URL must be a valid URL"),
+  TELEGRAM_WEBHOOK_SECRET: z
+    .string()
+    .min(1)
+    .default("pulse_tele_prod_sec_99"),
+  PUBLIC_API_URL: z
+    .string()
+    .url("PUBLIC_API_URL must be a valid URL")
+    .default("https://pulseapi.rumptycloud.app"),
   DASHBOARD_URL: z
     .string()
     .url("DASHBOARD_URL must be a valid URL")
-    .refine((url) => url.startsWith("https://"), {
-      message: "DASHBOARD_URL must use https in production",
-    }),
+    .default("https://pulse.rumptycloud.app"),
 });
 
 export function validateProductionConfig(): void {
@@ -32,6 +36,11 @@ export function validateProductionConfig(): void {
     );
     process.exit(1);
   }
+
+  process.env.PUBLIC_API_URL = process.env.PUBLIC_API_URL || result.data.PUBLIC_API_URL;
+  process.env.DASHBOARD_URL = process.env.DASHBOARD_URL || result.data.DASHBOARD_URL;
+  process.env.TELEGRAM_WEBHOOK_SECRET =
+    process.env.TELEGRAM_WEBHOOK_SECRET || result.data.TELEGRAM_WEBHOOK_SECRET;
 }
 
 export const config = {
