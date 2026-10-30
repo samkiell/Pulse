@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@pulse/db"],
   async rewrites() {
-    const apiPort = process.env.PORT || process.env.API_PORT || "3001";
+    const apiPort = process.env.API_PORT || "4000";
     const apiHost = process.env.INTERNAL_API_URL || `http://localhost:${apiPort}`;
     return [
       {

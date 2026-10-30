@@ -25,6 +25,11 @@ export function proxy(req: NextRequest) {
   }
 
   const isProd = process.env.NODE_ENV === "production";
+
+  // In local development, bypass basic auth unless explicitly enabled
+  if (!isProd && process.env.ENABLE_DEV_AUTH !== "true") {
+    return NextResponse.next();
+  }
   const expectedPassword = process.env.DASHBOARD_PASSWORD;
   const expectedUser = process.env.DASHBOARD_USER || "admin";
 
