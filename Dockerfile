@@ -3,7 +3,9 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
+
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g pnpm@9
@@ -26,7 +28,7 @@ COPY apps/api ./apps/api
 COPY apps/web ./apps/web
 
 # Generate Prisma client and build all workspace artifacts
-RUN pnpm --filter @pulse/db generate
+RUN pnpm --filter @pulse/db generate || (sleep 2 && pnpm --filter @pulse/db generate) || (sleep 5 && pnpm --filter @pulse/db generate)
 RUN pnpm --filter @samkiel/pulse build
 RUN pnpm --filter @pulse/api build
 RUN pnpm --filter @pulse/web build
