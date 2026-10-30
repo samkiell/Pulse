@@ -8,7 +8,7 @@
     "build": "pnpm --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build && pnpm --filter \"./examples/*\" build",
     "start:api": "node apps/api/dist/server.js",
     "start:web": "pnpm --filter @pulse/web start",
-    "test": "pnpm --filter @samkiel/pulse test && pnpm --filter @pulse/api test",
+    "test": "pnpm --filter @samkiel/pulse test && pnpm --filter @pulse/api test && pnpm --filter @pulse/web test",
     "typecheck": "pnpm -r run typecheck",
     "db:generate": "pnpm --filter @pulse/db generate",
     "db:migrate": "pnpm --filter @pulse/db migrate",
@@ -16,6 +16,7 @@
     "db:push": "pnpm --filter @pulse/db push"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "typescript": "^5.7.3"
   }
 }
