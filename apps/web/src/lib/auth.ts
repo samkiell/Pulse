@@ -3,19 +3,23 @@ import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@pulse/db";
 
+const authSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+const githubId = process.env.AUTH_GITHUB_ID;
+const githubSecret = process.env.AUTH_GITHUB_SECRET;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "f6c8d4e2b0a1928374650192837465ab",
+  secret: authSecret,
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: "database",
   },
   providers: [
     GitHub({
-      clientId: process.env.AUTH_GITHUB_ID || "Ov23liRaiyGCH0AmjZIa",
-      clientSecret: process.env.AUTH_GITHUB_SECRET || "cdc2572e84737000d7c441fc1fb0bfda5f1a82f3",
+      clientId: githubId,
+      clientSecret: githubSecret,
     }),
   ],
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
   callbacks: {
     async session({ session, user }) {
       if (session?.user && user) {
