@@ -50,6 +50,9 @@ if (allowedOrigins.length > 0) {
   app.use(cors({ origin: false }));
 }
 
+// Global JSON body parser for incoming API & webhook requests
+app.use(express.json({ limit: "512kb" }));
+
 // 1. Health endpoint (liveness check for Rumpty Cloud, no DB dependency)
 app.get("/health", (req, res) => {
   res.status(200).json({
