@@ -151,8 +151,10 @@ pnpm --filter @pulse/api telegram:set-webhook
 
 Pulse adheres to strict production security practices:
 
-- **Hashed API Keys:** API keys follow the format `pulse_live_<32 hex chars>`. Keys are hashed using SHA-256 before storage in PostgreSQL (`keyHash`). The plain key is displayed exactly once upon generation. Ingest requests hash the incoming key before query lookup.
-- **Dashboard Basic Auth Gate:** All dashboard pages and `/api/projects/**` routes are protected by HTTP Basic Auth using constant-time string comparisons (`crypto.timingSafeEqual`). In production, omitting `DASHBOARD_PASSWORD` fails closed with HTTP 503.
+- **GitHub OAuth & Database Sessions:** All dashboard routes are protected via NextAuth v5 backed by Prisma and PostgreSQL database sessions. Unauthenticated requests are redirected to `/login`, while unauthorized `/api/**` calls return HTTP 401 JSON.
+- **Strict User Ownership Scoping:** All project and incident access is scoped to the authenticated user (`ownerId: session.user.id`). Foreign or nonexistent project slugs return HTTP 404 (never 403) to prevent existence probing.
+- **Hashed API Keys:** API keys follow the format `pulse_live_<32 hex chars>`. Keys are hashed using SHA-256 before storage in PostgreSQL (`keyHash`). The plain key is displayed exactly once upon generation. Ingest requests hash the incoming key before query lookup. Rotating a key immediately revokes the old key.
+- **Internal API Secret Protection:** Cross-service simulation and internal requests require header `X-Internal-Secret` matching `INTERNAL_API_SECRET`.
 - **Rate Limiting:** Ingest endpoints enforce rate limits of 120 requests per minute per API key (falling back to client IP), returning HTTP 429 with standard `Retry-After` headers.
 - **Secret and PII Scrubber:** Error stack traces and metadata objects are scrubbed before reaching any LLM provider. Scrubbers redact Bearer tokens, `pulse_live_*` API keys, long hex and base64 strings, email addresses, and keys matching sensitive keywords (`password`, `token`, `secret`, `authorization`, `cookie`, `key`).
 - **Telegram Webhook Verification:** Incoming Telegram webhook requests are validated using constant-time verification of header `X-Telegram-Bot-Api-Secret-Token`.
@@ -165,13 +167,16 @@ Pulse adheres to strict production security practices:
 | Variable | Service | Required in Prod | Default | Description |
 |---|---|---|---|---|
 | `DATABASE_URL` | Database / API / Web | Yes | - | PostgreSQL connection string. For Rumpty SSL, append `?sslmode=require`. |
+| `AUTH_SECRET` | Web | Yes | - | NextAuth secret used to sign session cookies and tokens. |
+| `AUTH_GITHUB_ID` | Web | Yes | - | GitHub OAuth application Client ID. |
+| `AUTH_GITHUB_SECRET` | Web | Yes | - | GitHub OAuth application Client Secret. |
+| `INTERNAL_API_SECRET` | API / Web | Yes | - | Shared secret for internal cross-service triggers (e.g. simulation). |
+| `MAX_PROJECTS_PER_USER` | Web | No | `5` | Maximum number of projects an individual user can create. |
 | `PUBLIC_API_URL` | API | Yes | - | Public internet URL for API (used for Telegram webhooks). |
 | `PORT` | API / Web | No | `3001` (API) / `3000` (Web) | HTTP listening port. Honors container environment assignment. |
 | `NODE_ENV` | API / Web | Yes | `production` | Operational environment mode. |
-| `DASHBOARD_USER` | Web | No | `admin` | HTTP Basic Auth username for web dashboard. |
-| `DASHBOARD_PASSWORD` | Web | Yes | - | HTTP Basic Auth password. Fails closed with 503 if missing in production. |
 | `DASHBOARD_URL` | API | Yes | - | Web dashboard URL included in Telegram incident alerts. |
-| `INTERNAL_API_URL` | Web | No | `http://localhost:3001` | Internal URL used by Next.js rewrites to communicate with API. |
+| `INTERNAL_API_URL` | Web | No | `http://localhost:3001` | Internal URL used by Next.js to communicate with API. |
 | `INTERNAL_INGEST_URL` | Web | No | `http://localhost:3001/api/v1/ingest` | Internal endpoint used by dashboard simulator. |
 | `CORS_ORIGINS` | API | No | `http://localhost:3000` | Comma-separated allowed origins for dashboard API calls. |
 | `ALERT_DEBOUNCE_WINDOW_MINUTES` | API | No | `5` | Window in minutes to suppress duplicate alerts for recurring errors. |
@@ -229,26 +234,27 @@ For complete step-by-step instructions on deploying the database, API, dashboard
 
 ---
 
-## Dashboard Interface Mockup
+## Visual Interface & Screenshots
 
-```text
-+-----------------------------------------------------------------------------------+
-|  Pulse Observability Dashboard                                      Project: Prod |
-+-----------------------------------------------------------------------------------+
-|  Active Incidents (2)     Total Occurrences: 1,482        Alert Status: Active    |
-|                                                                                   |
-|  [CRITICAL] DatabaseConnectionError: connect ECONNREFUSED 127.0.0.1:5432         |
-|  Status: OPEN | First: 14m ago | Last: 1m ago | Total: 42 events                  |
-|  Diagnosis [AI]: Postgres host is unreachable or rejected connection pool.       |
-|  Suggested Fix: Verify DATABASE_URL hostname and ensure managed DB is running.    |
-|                                                                                   |
-|  [HIGH] TypeError: Cannot read properties of undefined (reading 'headers')        |
-|  Status: RESOLVED | First: 2h ago | Last: 45m ago | Total: 8 events               |
-|  Diagnosis [Rule-Based]: Null reference encountered during request parsing.      |
-+-----------------------------------------------------------------------------------+
-```
+The Pulse web application is built with Next.js 16 (App Router), TailwindCSS, and a high-contrast dark theme engineered for zero eyestrain during on-call incidents.
 
-Visual UI assets and application screenshots are available in [docs/images/](docs/images/).
+### 1. Landing Page & Telegram Alert Preview
+![Pulse Landing Page](docs/images/landing.png)
+
+### 2. Multi-Project Overview & Connection Status
+![Projects Overview](docs/images/projects.png)
+
+### 3. Incident Management & Status Filtering
+![Incidents Stream](docs/images/incidents.png)
+
+### 4. Incident Detail, AI Diagnosis & Stack Trace Inspection
+![Incident Detail](docs/images/incident-detail.png)
+
+### 5. SDK Setup & Key Rotation
+![SDK Setup](docs/images/setup.png)
+
+### 6. Multi-Chat Telegram Alert Routing
+![Alerts Configuration](docs/images/alerts.png)
 
 ---
 
