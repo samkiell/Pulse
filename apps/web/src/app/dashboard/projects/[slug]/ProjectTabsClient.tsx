@@ -237,9 +237,9 @@ export function ProjectTabsClient({ project }: { project: ProjectData }) {
     { id: "settings", label: "Settings" },
   ];
 
-  const installSnippet = `npm install @samkiel/pulse-monitor`;
+  const installSnippet = `npm install @samkiel/pulse`;
   const expressSnippet = `import express from "express";
-import pulse from "@samkiel/pulse-monitor";
+import pulse from "@samkiel/pulse";
 
 const app = express();
 
@@ -251,7 +251,7 @@ pulse.init({
 // Attach Pulse error middleware AFTER all route handlers
 app.use(pulse.errorHandler());`;
 
-  const manualCaptureSnippet = `import pulse from "@samkiel/pulse-monitor";
+  const manualCaptureSnippet = `import pulse from "@samkiel/pulse";
 
 pulse.captureException(new Error("Database connection timeout"), {
   service: "${project.name}",
