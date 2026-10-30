@@ -1,5 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { config } from "../config";
 import {
   diagnoseError,
   generateRuleBasedDiagnosis,
@@ -9,25 +10,37 @@ import {
 
 describe("Pulse AI Diagnosis Service", () => {
   test("generates fallback diagnosis for null pointer/undefined errors when API key not set", async () => {
-    const result = await diagnoseError(
-      "TypeError",
-      "Cannot read properties of undefined (reading 'session')"
-    );
+    const origKey = config.rumptyAiApiKey;
+    (config as any).rumptyAiApiKey = "";
+    try {
+      const result = await diagnoseError(
+        "TypeError",
+        "Cannot read properties of undefined (reading 'session')"
+      );
 
-    assert.strictEqual(result.source, "heuristic");
-    assert.ok(result.diagnosis.includes("undefined or null variable"));
-    assert.ok(result.suggestedFix.includes("optional chaining"));
+      assert.strictEqual(result.source, "heuristic");
+      assert.ok(result.diagnosis.includes("undefined or null variable"));
+      assert.ok(result.suggestedFix.includes("optional chaining"));
+    } finally {
+      (config as any).rumptyAiApiKey = origKey;
+    }
   });
 
   test("generates fallback diagnosis for connection refused/timeout errors", async () => {
-    const result = await diagnoseError(
-      "ConnectionError",
-      "connect ECONNREFUSED 127.0.0.1:5432"
-    );
+    const origKey = config.rumptyAiApiKey;
+    (config as any).rumptyAiApiKey = "";
+    try {
+      const result = await diagnoseError(
+        "ConnectionError",
+        "connect ECONNREFUSED 127.0.0.1:5432"
+      );
 
-    assert.strictEqual(result.source, "heuristic");
-    assert.ok(result.diagnosis.includes("Connection") || result.diagnosis.includes("unreachable"));
-    assert.ok(result.suggestedFix.includes("Verify target host") || result.suggestedFix.includes("credentials"));
+      assert.strictEqual(result.source, "heuristic");
+      assert.ok(result.diagnosis.includes("Connection") || result.diagnosis.includes("unreachable"));
+      assert.ok(result.suggestedFix.includes("Verify target host") || result.suggestedFix.includes("credentials"));
+    } finally {
+      (config as any).rumptyAiApiKey = origKey;
+    }
   });
 
   test("tightened connection heuristic ignores broad 'connect' without error codes", () => {
@@ -44,14 +57,20 @@ describe("Pulse AI Diagnosis Service", () => {
   });
 
   test("generates fallback diagnosis for JSON syntax errors", async () => {
-    const result = await diagnoseError(
-      "SyntaxError",
-      "Unexpected token '<', '<!DOCTYPE '... is not valid JSON"
-    );
+    const origKey = config.rumptyAiApiKey;
+    (config as any).rumptyAiApiKey = "";
+    try {
+      const result = await diagnoseError(
+        "SyntaxError",
+        "Unexpected token '<', '<!DOCTYPE '... is not valid JSON"
+      );
 
-    assert.strictEqual(result.source, "heuristic");
-    assert.ok(result.diagnosis.includes("JSON"));
-    assert.ok(result.suggestedFix.includes("try/catch") || result.suggestedFix.includes("validate"));
+      assert.strictEqual(result.source, "heuristic");
+      assert.ok(result.diagnosis.includes("JSON"));
+      assert.ok(result.suggestedFix.includes("try/catch") || result.suggestedFix.includes("validate"));
+    } finally {
+      (config as any).rumptyAiApiKey = origKey;
+    }
   });
 
   test("scrubs sensitive tokens, keys, emails, and credentials from text", () => {
