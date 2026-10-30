@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
+import { requireApiUser, getOwnedIncident } from "@/lib/auth-helpers";
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ slug: string; id: string }> }
 ) {
   try {
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
+
     const { slug, id } = await params;
     const body = await req.json();
     const { status } = body;
@@ -14,25 +18,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
     }
 
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-
-    if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
-    }
-
-    const incident = await prisma.incident.findFirst({
-      where: { id, projectId: project.id },
-    });
+    const incident = await getOwnedIncident(user.id, slug, id);
 
     if (!incident) {
-      return NextResponse.json({ error: "Incident not found in project" }, { status: 404 });
+      return NextResponse.json({ error: "Incident not found" }, { status: 404 });
     }
 
     const updated = await prisma.incident.update({
-      where: { id },
+      where: { id: incident.id },
       data: { status },
     });
 
