@@ -357,3 +357,66 @@ export function generateRuleBasedDiagnosis(
     } and add guard clauses.`,
   };
 }
+
+/**
+ * Queries Rumpty AI chat completions for conversational interactions in Telegram or dashboard.
+ */
+export async function queryRumptyAiChat(
+  userPrompt: string,
+  systemPrompt?: string
+): Promise<string> {
+  const endpoint = config.rumptyAiEndpoint || "https://chat.rumptycloud.com/v1/chat/completions";
+  const apiKey = config.rumptyAiApiKey;
+  const model = config.rumptyAiModel || "llama3.2:3b";
+
+  if (!apiKey) {
+    return "Pulse AI is running in standalone mode. To enable full AI chat and diagnoses, configure RUMPTY_AI_API_KEY in your environment.";
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              systemPrompt ||
+              "You are Pulse AI, an intelligent DevOps, observability, and debugging assistant developed by SAMKIEL and powered by Rumpty Cloud. You help developers troubleshoot runtime errors, analyze logs, and optimize application resilience. Keep your answers concise, direct, technical, and under 1200 characters.",
+          },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`[Pulse AI Chat] Inference error: HTTP ${response.status}`);
+      return "Pulse AI is temporarily unavailable. Please try again in a few moments.";
+    }
+
+    const data = (await response.json()) as any;
+    const content = data?.choices?.[0]?.message?.content?.trim();
+    return (
+      content ||
+      "I received your message, but no response was generated. How can I assist you with your application errors?"
+    );
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    console.warn(`[Pulse AI Chat] Request error:`, error?.message || error);
+    return "Pulse AI request timed out or encountered an error. Please try again.";
+  }
+}

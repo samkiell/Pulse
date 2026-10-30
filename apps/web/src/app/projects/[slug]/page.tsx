@@ -18,6 +18,8 @@ import {
   X,
   Sparkles,
   HelpCircle,
+  Send,
+  Radio,
 } from "lucide-react";
 import { formatTimeAgo } from "@/lib/utils";
 
@@ -90,6 +92,11 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
   const [rotatingKey, setRotatingKey] = useState(false);
   const [generatingTgToken, setGeneratingTgToken] = useState(false);
+  const [manualChatId, setManualChatId] = useState("");
+  const [connectingChatId, setConnectingChatId] = useState(false);
+  const [connectMessage, setConnectMessage] = useState<string | null>(null);
+  const [sendingTestAlert, setSendingTestAlert] = useState(false);
+  const [testAlertSuccess, setTestAlertSuccess] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -114,6 +121,32 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
   useEffect(() => {
     fetchData();
   }, [slug]);
+
+  // Real-time polling while on telegram tab if not connected
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    const isConnected = Boolean(data?.project?.telegramIntegrations?.[0]?.chatId);
+
+    if (activeTab === "telegram" && !isConnected) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/projects/${slug}/telegram`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.connected) {
+              fetchData();
+            }
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }, 2500);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeTab, slug, data]);
 
   // Handle deep link from Telegram alert (?incident=<id>)
   useEffect(() => {
@@ -180,6 +213,59 @@ function ProjectDetailsContent({ slug }: { slug: string }) {
       console.error("Failed to generate Telegram token", err);
     } finally {
       setGeneratingTgToken(false);
+    }
+  };
+
+  const handleManualChatConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualChatId.trim()) return;
+    try {
+      setConnectingChatId(true);
+      setConnectMessage(null);
+      const res = await fetch(`/api/projects/${slug}/telegram`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: manualChatId.trim(),
+          chatTitle: "Direct Chat",
+          verificationToken: telegram?.verificationToken,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setConnectMessage("Telegram connected successfully!");
+        setManualChatId("");
+        await fetchData();
+      } else {
+        setConnectMessage(`Error: ${json.error || "Failed to link chat"}`);
+      }
+    } catch (err: any) {
+      setConnectMessage(`Error: ${err.message}`);
+    } finally {
+      setConnectingChatId(false);
+    }
+  };
+
+  const handleSendTestAlert = async () => {
+    try {
+      setSendingTestAlert(true);
+      setTestAlertSuccess(null);
+      const res = await fetch(`/api/projects/${slug}/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ errorType: "uncaughtException" }),
+      });
+      if (res.ok) {
+        setTestAlertSuccess("Test crash alert dispatched to Telegram!");
+        setTimeout(() => fetchData(), 1200);
+      } else {
+        const json = await res.json();
+        setTestAlertSuccess(`Failed: ${json.error || "Simulation error"}`);
+      }
+    } catch (err: any) {
+      setTestAlertSuccess(`Error: ${err.message}`);
+    } finally {
+      setSendingTestAlert(false);
     }
   };
 
@@ -596,10 +682,10 @@ app.use(pulse.errorHandler());`}</pre>
               <div>
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
                   <Bot className="w-5 h-5 text-red-400" />
-                  Telegram Crash Alerting
+                  Telegram Crash Alerting & AI Bot
                 </h3>
                 <p className="text-xs text-[#a1a1aa] mt-1">
-                  Connect your Telegram account or channel to receive instant crash alerts with AI diagnoses.
+                  Connect your Telegram account or channel to receive real-time crash alerts with Rumpty AI root-cause diagnosis.
                 </p>
               </div>
 
@@ -627,44 +713,130 @@ app.use(pulse.errorHandler());`}</pre>
               </div>
             </div>
 
-            <div className="border border-[#27272a] rounded-lg p-4 bg-[#18181b]/50 space-y-4">
-              <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block">
-                How to Connect:
-              </span>
-              <ol className="text-xs text-[#d4d4d8] space-y-3 list-decimal list-inside">
-                <li>
-                  Open the Telegram link or search for the bot:
-                  <div className="mt-2 flex items-center gap-3">
-                    <a
-                      href={telegram?.deepLink || `https://t.me/rumptypulsebot?start=${telegram?.verificationToken}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Open Bot in Telegram</span>
-                    </a>
+            {isTelegramConnected ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <h4 className="text-sm font-semibold text-white">Active Telegram Subscription</h4>
+                    </div>
+                    <p className="text-xs text-emerald-300">
+                      Alerts and Rumpty AI diagnostics are streaming to chat <b>{telegram?.chatTitle || "Direct Chat"}</b> (ID: <code>{telegram?.chatId}</code>).
+                    </p>
                   </div>
-                </li>
-                <li>
-                  Or send this command directly to the bot:
-                  <div className="mt-2 flex items-center justify-between bg-[#121215] border border-[#27272a] rounded-lg p-3 font-mono text-xs text-white">
-                    <code>/start {telegram?.verificationToken}</code>
-                    <button
-                      onClick={() =>
-                        copyToClipboard(`/start ${telegram?.verificationToken}`, "tg-token")
-                      }
-                      className="hover:text-red-400 transition-colors ml-2"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
+
+                  <button
+                    onClick={handleSendTestAlert}
+                    disabled={sendingTestAlert}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium transition-colors whitespace-nowrap self-start sm:self-auto"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${sendingTestAlert ? "animate-spin" : ""}`} />
+                    <span>Send Test Crash Alert</span>
+                  </button>
+                </div>
+
+                {testAlertSuccess && (
+                  <div className="p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-xs font-mono text-white flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-emerald-400" />
+                    <span>{testAlertSuccess}</span>
                   </div>
-                </li>
-                <li>
-                  Tokens are valid for 24 hours and single use. The bot will acknowledge connection upon receipt.
-                </li>
-              </ol>
-            </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Live listening pulse banner */}
+                <div className="flex items-center justify-between p-3.5 rounded-lg bg-[#18181b] border border-[#27272a] text-xs text-[#a1a1aa]">
+                  <div className="flex items-center gap-2.5">
+                    <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    <span>Listening for incoming Telegram connection. Page updates automatically once connected.</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-[#71717a]">Auto-polling</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Method 1: Bot Deep Link & Token */}
+                  <div className="border border-[#27272a] rounded-lg p-4 bg-[#18181b]/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider">
+                        Method 1: Connect via Bot
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-[#d4d4d8]">
+                      Open the bot and click Start, or copy your link token and paste it directly into chat:
+                    </p>
+
+                    <div className="pt-1">
+                      <a
+                        href={telegram?.deepLink || `https://t.me/rumptypulsebot?start=${telegram?.verificationToken}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open @rumptypulsebot in Telegram</span>
+                      </a>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] text-[#71717a]">Your Link Token:</span>
+                      <div className="flex items-center justify-between bg-[#121215] border border-[#27272a] rounded-lg p-2.5 font-mono text-xs text-white">
+                        <code className="truncate">{telegram?.verificationToken || "plink_generating..."}</code>
+                        <button
+                          onClick={() => copyToClipboard(telegram?.verificationToken || "", "tg-token-raw")}
+                          className="hover:text-red-400 transition-colors ml-2 flex-shrink-0"
+                          title="Copy Token"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Method 2: Direct Chat ID Entry */}
+                  <div className="border border-[#27272a] rounded-lg p-4 bg-[#18181b]/50 space-y-3">
+                    <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block">
+                      Method 2: Connect by Chat ID
+                    </span>
+
+                    <p className="text-xs text-[#d4d4d8]">
+                      Enter your Telegram personal or group Chat ID to link instantly without opening a link:
+                    </p>
+
+                    <form onSubmit={handleManualChatConnect} className="space-y-2.5 pt-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={manualChatId}
+                          onChange={(e) => setManualChatId(e.target.value)}
+                          placeholder="e.g. 123456789 or -100123456789"
+                          className="flex-1 bg-[#121215] border border-[#27272a] rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-[#52525b] focus:outline-none focus:border-red-500/50"
+                        />
+                        <button
+                          type="submit"
+                          disabled={connectingChatId || !manualChatId.trim()}
+                          className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <Send className={`w-3.5 h-3.5 ${connectingChatId ? "animate-spin" : ""}`} />
+                          <span>Connect</span>
+                        </button>
+                      </div>
+
+                      {connectMessage && (
+                        <p
+                          className={`text-xs ${
+                            connectMessage.startsWith("Error") ? "text-red-400" : "text-emerald-400"
+                          }`}
+                        >
+                          {connectMessage}
+                        </p>
+                      )}
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
