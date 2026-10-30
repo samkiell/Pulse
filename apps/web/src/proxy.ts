@@ -1,90 +1,56 @@
 import { NextResponse, type NextRequest } from "next/server";
-import crypto from "node:crypto";
-
-function safeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Exempt health endpoint and static Next.js assets
+  // 1. Static assets and Next.js internals
   if (
-    pathname === "/api/health" ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
-    pathname === "/favicon.ico"
+    pathname.startsWith("/images") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
   ) {
     return NextResponse.next();
   }
 
-  const isProd = process.env.NODE_ENV === "production";
-
-  // In local development, bypass basic auth unless explicitly enabled
-  if (!isProd && process.env.ENABLE_DEV_AUTH !== "true") {
+  // 2. Health and Auth endpoints are strictly public
+  if (pathname === "/api/health" || pathname.startsWith("/api/auth")) {
     return NextResponse.next();
   }
-  const expectedPassword = process.env.DASHBOARD_PASSWORD;
-  const expectedUser = process.env.DASHBOARD_USER || "admin";
 
-  if (isProd && !expectedPassword) {
-    return new NextResponse(
-      "Service Unavailable: DASHBOARD_PASSWORD must be configured in production",
-      {
-        status: 503,
-        headers: { "content-type": "text/plain" },
-      }
-    );
+  // Check for NextAuth session cookies
+  const sessionToken =
+    req.cookies.get("__Secure-authjs.session-token")?.value ||
+    req.cookies.get("authjs.session-token")?.value ||
+    req.cookies.get("__Secure-next-auth.session-token")?.value ||
+    req.cookies.get("next-auth.session-token")?.value;
+
+  const isAuthenticated = Boolean(sessionToken);
+
+  // 3. API route interception: return 401 JSON if unauthenticated
+  if (pathname.startsWith("/api/")) {
+    if (!isAuthenticated) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+    return NextResponse.next();
   }
 
-  const effectivePassword = expectedPassword || "admin";
-
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader || !authHeader.startsWith("Basic ")) {
-    return new NextResponse("Authentication required", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Pulse Dashboard"' },
-    });
+  // 4. Dashboard route interception: redirect to /login if unauthenticated
+  if (pathname.startsWith("/dashboard")) {
+    if (!isAuthenticated) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next();
   }
 
-  const base64Credentials = authHeader.slice(6).trim();
-  let credentials = "";
-  try {
-    credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
-  } catch {
-    return new NextResponse("Invalid authorization encoding", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Pulse Dashboard"' },
-    });
-  }
-
-  const colonIdx = credentials.indexOf(":");
-  if (colonIdx === -1) {
-    return new NextResponse("Invalid credentials format", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Pulse Dashboard"' },
-    });
-  }
-
-  const user = credentials.slice(0, colonIdx);
-  const pass = credentials.slice(colonIdx + 1);
-
-  const userMatches = safeCompare(user, expectedUser);
-  const passMatches = safeCompare(pass, effectivePassword);
-
-  if (!userMatches || !passMatches) {
-    return new NextResponse("Unauthorized", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Pulse Dashboard"' },
-    });
-  }
-
+  // 5. All other routes (e.g. /, /login, /docs) are public
   return NextResponse.next();
 }
 
