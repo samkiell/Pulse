@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
 import { createHash, randomBytes } from "node:crypto";
+import {
+  requireApiUser,
+  generateProjectSlug,
+  MAX_PROJECTS_PER_USER,
+} from "@/lib/auth-helpers";
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -8,7 +13,11 @@ function hashKey(key: string): string {
 
 export async function GET() {
   try {
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
+
     const projects = await prisma.project.findMany({
+      where: { ownerId: user.id },
       orderBy: { createdAt: "desc" },
       include: {
         apiKeys: {
@@ -52,21 +61,30 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
+
+    // Check project limit
+    const existingCount = await prisma.project.count({
+      where: { ownerId: user.id },
+    });
+
+    if (existingCount >= MAX_PROJECTS_PER_USER) {
+      return NextResponse.json(
+        { error: `Project limit reached. Maximum ${MAX_PROJECTS_PER_USER} projects allowed per account.` },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
     const name = body.name?.trim();
+    const label = body.label?.trim();
 
     if (!name) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
     }
 
-    const baseSlug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-
-    const randomSuffix = randomBytes(2).toString("hex");
-    const slug = `${baseSlug}-${randomSuffix}`;
-
+    const slug = generateProjectSlug(name);
     const rawApiKey = `pulse_live_${randomBytes(16).toString("hex")}`;
     const keyHash = hashKey(rawApiKey);
     const keyPrefix = rawApiKey.slice(0, 12);
@@ -76,11 +94,12 @@ export async function POST(req: Request) {
       data: {
         name,
         slug,
+        ownerId: user.id,
         apiKeys: {
           create: {
             keyHash,
             keyPrefix,
-            name: "Default API Key",
+            name: label ? `${label} Key` : "Default API Key",
           },
         },
         telegramIntegrations: {
@@ -102,12 +121,17 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ||
       "rumptypulsebot";
     const telegramDeepLink = `https://t.me/${botUsername}?start=${telegramToken}`;
+    const ingestEndpoint =
+      process.env.INTERNAL_INGEST_URL ||
+      process.env.NEXT_PUBLIC_INGEST_URL ||
+      "http://localhost:3001/api/v1/ingest";
 
     return NextResponse.json(
       {
         ...project,
         apiKey: rawApiKey,
         telegramDeepLink,
+        ingestEndpoint,
       },
       { status: 201 }
     );
