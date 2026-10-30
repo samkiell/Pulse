@@ -1,381 +1,358 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  FolderGit2,
-  Plus,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { auth } from "@/lib/auth";
+import { Logo } from "@/components/ui/Logo";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { ArrowRight, CheckCircle2, Shield, Cpu, Layers, Terminal, Sparkles } from "lucide-react";
 
-interface Project {
-  id: string;
-  name: string;
-  slug: string;
-  createdAt: string;
-  apiKeys: {
-    id: string;
-    keyPrefix: string;
-    maskedKey?: string;
-    lastUsedAt: string | null;
-  }[];
-  telegramIntegrations: {
-    id: string;
-    chatId: string | null;
-    chatTitle: string | null;
-    verificationToken: string;
-  }[];
-  _count: {
-    incidents: number;
-    errorEvents: number;
-  };
-}
+export default async function LandingPage() {
+  const session = await auth();
 
-export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [createdProjectKey, setCreatedProjectKey] = useState<{
-    name: string;
-    slug: string;
-    apiKey: string;
-    telegramDeepLink?: string;
-  } | null>(null);
+  const installCode = `npm install @samkiel/pulse-monitor`;
+  const initCode = `import pulse from "@samkiel/pulse-monitor";
 
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/projects");
-      if (res.ok) {
-        const data = await res.json();
-        setProjects(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch projects", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+pulse.init({
+  apiKey: process.env.PULSE_API_KEY!,
+  endpoint: "https://pulseapi.rumptycloud.app/api/v1/ingest",
+});
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
-
-    try {
-      setCreating(true);
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newProjectName.trim() }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        setNewProjectName("");
-        setIsModalOpen(false);
-        setCreatedProjectKey({
-          name: json.name,
-          slug: json.slug,
-          apiKey: json.apiKey,
-          telegramDeepLink: json.telegramDeepLink,
-        });
-        fetchProjects();
-      }
-    } catch (err) {
-      console.error("Failed to create project", err);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(id);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
+// Attach Express error handler
+app.use(pulse.errorHandler());`;
 
   return (
-    <div className="space-y-8">
-      {/* Top Banner / Heading */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#27272a] pb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-3">
-            Monitored Services
-            <span className="text-xs font-mono font-medium px-2.5 py-0.5 rounded-full bg-[#18181b] border border-[#27272a] text-[#a1a1aa]">
-              {projects.length} {projects.length === 1 ? "project" : "projects"}
-            </span>
+    <div className="min-h-screen bg-bg text-text flex flex-col selection:bg-cyan/20 selection:text-cyan">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Logo />
+          </Link>
+          <nav className="flex items-center gap-4">
+            <Link
+              href="/docs"
+              className="text-xs font-medium text-muted hover:text-text transition-colors"
+            >
+              Docs
+            </Link>
+            {session?.user ? (
+              <Link href="/dashboard">
+                <Button variant="primary" size="sm">
+                  Go to Dashboard <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/login">
+                <Button variant="primary" size="sm">
+                  Sign in with GitHub
+                </Button>
+              </Link>
+            )}
+          </nav>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col">
+        {/* Section 1: Hero */}
+        <section className="pt-20 pb-16 px-4 max-w-4xl mx-auto text-center flex flex-col items-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-2 border border-border text-xs text-muted mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan" />
+            <span>Built for apps deployed on Rumpty Cloud</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-text leading-[1.15] max-w-3xl">
+            Know when your Rumpty app crashes, before your users tell you.
           </h1>
-          <p className="text-sm text-[#a1a1aa] mt-1">
-            Real-time runtime crash alerts and AI root-cause diagnostics for your Rumpty Cloud deployments.
+
+          <p className="mt-5 text-base sm:text-lg text-muted max-w-2xl leading-relaxed">
+            Pulse sends a Telegram alert with the likely cause and a suggested fix the moment an error occurs in production.
           </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchProjects}
-            className="p-2 rounded-lg bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-[#a1a1aa] transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition-colors shadow-lg shadow-red-500/10"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Connect New Service</span>
-          </button>
-        </div>
-      </div>
+          <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            <Link href={session?.user ? "/dashboard" : "/login"} className="w-full sm:w-auto">
+              <Button variant="primary" size="lg" className="w-full sm:w-auto">
+                {session?.user ? "Go to Dashboard" : "Sign in with GitHub"}
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link href="/docs" className="w-full sm:w-auto">
+              <Button variant="secondary" size="lg" className="w-full sm:w-auto">
+                Read the docs
+              </Button>
+            </Link>
+          </div>
+        </section>
 
-      {/* Grid of Projects */}
-      {loading && projects.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-48 rounded-xl bg-[#18181b] border border-[#27272a]" />
-          ))}
-        </div>
-      ) : projects.length === 0 ? (
-        <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-[#27272a] bg-[#121215]">
-          <FolderGit2 className="w-12 h-12 text-[#71717a] mx-auto mb-3 opacity-60" />
-          <h3 className="text-base font-semibold text-white">No Monitored Services Yet</h3>
-          <p className="text-xs text-[#a1a1aa] max-w-sm mx-auto mt-1 mb-6">
-            Get started by registering a service to receive crash notifications and AI incident diagnoses.
-          </p>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-xs transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Register Your First Service</span>
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => {
-            const hasTelegram = project.telegramIntegrations.some((t) => t.chatId !== null);
-            const activeKey = project.apiKeys[0]?.maskedKey || "No active key";
-
-            return (
-              <div
-                key={project.id}
-                className="group relative rounded-xl border border-[#27272a] bg-[#121215] hover:border-[#3f3f46] transition-all p-5 flex flex-col justify-between shadow-sm hover:shadow-md"
-              >
-                <div>
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-[#e4e4e7]">
-                        <FolderGit2 className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="font-semibold text-white group-hover:text-red-400 transition-colors">
-                          {project.name}
-                        </h2>
-                        <span className="text-xs font-mono text-[#71717a]">{project.slug}</span>
-                      </div>
-                    </div>
-
-                    <Link
-                      href={`/projects/${project.slug}`}
-                      className="p-1.5 rounded-md hover:bg-[#27272a] text-[#71717a] hover:text-white transition-colors"
-                      title="Open project"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </div>
-
-                  {/* Status indicators */}
-                  <div className="grid grid-cols-2 gap-2 my-4 pt-2 border-t border-[#1f1f23]">
-                    <div className="bg-[#18181b]/70 rounded-lg p-2.5 border border-[#27272a]/70">
-                      <span className="text-[11px] text-[#71717a] uppercase font-mono tracking-wider block mb-0.5">
-                        Incidents
-                      </span>
-                      <span className="text-lg font-bold text-white flex items-center gap-1.5">
-                        {project._count.incidents}
-                        {project._count.incidents > 0 && (
-                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="bg-[#18181b]/70 rounded-lg p-2.5 border border-[#27272a]/70">
-                      <span className="text-[11px] text-[#71717a] uppercase font-mono tracking-wider block mb-0.5">
-                        Telegram Bot
-                      </span>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {hasTelegram ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Connected
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-amber-400/90 font-medium">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            Unlinked
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* API Key Display */}
-                  <div className="mt-3">
-                    <span className="text-[11px] text-[#71717a] font-mono block mb-1">API Key:</span>
-                    <div className="flex items-center justify-between bg-[#18181b] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs font-mono text-[#a1a1aa]">
-                      <span className="truncate">{activeKey}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Action */}
-                <div className="mt-5 pt-3 border-t border-[#1f1f23] flex items-center justify-between text-xs">
-                  <span className="text-[#71717a]">
-                    Total Events: <strong className="text-[#e4e4e7]">{project._count.errorEvents}</strong>
-                  </span>
-                  <Link
-                    href={`/projects/${project.slug}`}
-                    className="text-red-400 hover:text-red-300 font-medium flex items-center gap-1 transition-colors"
-                  >
-                    View Incidents →
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Creation Success Modal with Full API Key (Shown Once) */}
-      {createdProjectKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-[#121215] border border-[#27272a] rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  Service Created: {createdProjectKey.name}
-                </h3>
-                <p className="text-xs text-[#a1a1aa] mt-1">
-                  Copy your API key now. For security, this key is hashed and will not be displayed again.
+        {/* Section 2: The Gap */}
+        <section className="py-16 px-4 border-y border-border bg-surface/50">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-10">
+              <h2 className="text-xs uppercase tracking-wider text-muted font-mono font-semibold">
+                The Observability Gap
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-surface border border-border rounded-lg p-6 flex flex-col gap-2">
+                <span className="font-mono text-xs text-muted">01 / METRICS</span>
+                <h3 className="text-sm font-semibold text-text">VM metrics are dashboard charts only</h3>
+                <p className="text-xs text-muted leading-relaxed">
+                  CPU and memory graphs show historical resource spikes but cannot tell you which line of code crashed or why.
                 </p>
               </div>
-              <button
-                onClick={() => setCreatedProjectKey(null)}
-                className="text-[#71717a] hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              <div className="bg-surface border border-border rounded-lg p-6 flex flex-col gap-2">
+                <span className="font-mono text-xs text-muted">02 / LOGS</span>
+                <h3 className="text-sm font-semibold text-text">Deployment logs are build logs only</h3>
+                <p className="text-xs text-muted leading-relaxed">
+                  Platform build output shows compilation status, but runtime stack traces disappear into ephemeral stdout.
+                </p>
+              </div>
+
+              <div className="bg-surface border border-border rounded-lg p-6 flex flex-col gap-2">
+                <span className="font-mono text-xs text-muted">03 / ALERTS</span>
+                <h3 className="text-sm font-semibold text-text">There are no runtime error alerts</h3>
+                <p className="text-xs text-muted leading-relaxed">
+                  Without active monitoring, unhandled exceptions and database disconnects go unnoticed until users complain.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block">
-                API Key (Shown Once)
-              </span>
-              <div className="flex items-center justify-between bg-[#18181b] border border-emerald-500/30 rounded-lg p-3 font-mono text-xs text-white break-all">
-                <span>{createdProjectKey.apiKey}</span>
-                <button
-                  onClick={() => copyToClipboard(createdProjectKey.apiKey, "created-key")}
-                  className="ml-2 hover:text-emerald-400 text-[#a1a1aa] transition-colors shrink-0"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-              {copiedKey === "created-key" && (
-                <span className="text-[11px] text-emerald-400 font-mono block">
-                  Copied to clipboard.
-                </span>
-              )}
-            </div>
-
-            {createdProjectKey.telegramDeepLink && (
-              <div className="pt-2">
-                <span className="text-xs font-mono text-[#71717a] uppercase tracking-wider block mb-1.5">
-                  Telegram Alert Link
-                </span>
-                <a
-                  href={createdProjectKey.telegramDeepLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Connect Telegram Bot</span>
-                </a>
-              </div>
-            )}
-
-            <div className="flex justify-end pt-3 border-t border-[#27272a]">
-              <Link
-                href={`/projects/${createdProjectKey.slug}`}
-                onClick={() => setCreatedProjectKey(null)}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
-              >
-                Go to Project Dashboard →
-              </Link>
+            <div className="mt-8 text-center">
+              <p className="text-sm font-medium text-cyan">
+                Pulse fills that gap with zero-config crash notifications.
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        </section>
 
-      {/* New Project Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-[#121215] border border-[#27272a] rounded-2xl p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white mb-1">Connect New Service</h3>
-            <p className="text-xs text-[#a1a1aa] mb-4">
-              Enter the name of your service to generate an API key and Telegram connection token.
-            </p>
+        {/* Section 3: How It Works */}
+        <section className="py-20 px-4 max-w-5xl mx-auto w-full">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold tracking-tight text-text">How it works</h2>
+            <p className="text-xs text-muted mt-2">Three straightforward steps to production alerting</p>
+          </div>
 
-            <form onSubmit={handleCreateProject} className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono text-[#71717a] mb-1.5 uppercase tracking-wider">
-                  Service Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. backend-api"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#18181b] border border-[#27272a] text-white text-sm focus:outline-none focus:border-red-500 font-sans"
-                  autoFocus
-                />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-5 flex flex-col gap-6">
+              <div className="flex items-start gap-4 p-4 rounded-lg bg-surface border border-border">
+                <div className="w-7 h-7 rounded-full bg-cyan/10 border border-cyan/30 text-cyan flex items-center justify-center font-mono text-xs font-bold shrink-0">
+                  1
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-text">Install the SDK</h3>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">
+                    Add the lightweight package to your Node.js or Express service. No heavy background agents required.
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-sm text-[#a1a1aa] hover:text-white hover:bg-[#18181b] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !newProjectName.trim()}
-                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-medium text-sm transition-colors"
-                >
-                  {creating ? "Creating..." : "Create Service"}
-                </button>
+              <div className="flex items-start gap-4 p-4 rounded-lg bg-surface border border-border">
+                <div className="w-7 h-7 rounded-full bg-violet/10 border border-violet/30 text-violet flex items-center justify-center font-mono text-xs font-bold shrink-0">
+                  2
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-text">Link Telegram</h3>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">
+                    Start the bot with your project link token. One project can notify multiple team members or dev channels.
+                  </p>
+                </div>
               </div>
-            </form>
+
+              <div className="flex items-start gap-4 p-4 rounded-lg bg-surface border border-border">
+                <div className="w-7 h-7 rounded-full bg-ok/10 border border-ok/30 text-ok flex items-center justify-center font-mono text-xs font-bold shrink-0">
+                  3
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-text">Get alerts</h3>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">
+                    Receive immediate alerts with root cause analysis and a copy-pasteable fix before users report downtime.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 flex flex-col gap-4">
+              <div className="rounded-lg bg-surface border border-border overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface-2/60 text-xs font-mono text-muted">
+                  <span>Terminal</span>
+                  <CopyButton text={installCode} />
+                </div>
+                <div className="p-4 bg-bg font-mono text-xs text-text overflow-x-auto">
+                  <code>{installCode}</code>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-surface border border-border overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface-2/60 text-xs font-mono text-muted">
+                  <span>server.js</span>
+                  <CopyButton text={initCode} />
+                </div>
+                <div className="p-4 bg-bg font-mono text-xs text-text leading-relaxed overflow-x-auto">
+                  <pre>
+                    <code>{initCode}</code>
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 4: Alert Preview */}
+        <section className="py-16 px-4 border-t border-border bg-surface/30">
+          <div className="max-w-4xl mx-auto flex flex-col items-center">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold tracking-tight text-text">Real-time Telegram Alert Preview</h2>
+              <p className="text-xs text-muted mt-1">What your team actually receives on every critical crash</p>
+            </div>
+
+            {/* Telegram Message Recreation (HTML/CSS only, not an image) */}
+            <div className="w-full max-w-lg bg-[#17212B] border border-[#2B5278] rounded-xl p-4 sm:p-5 shadow-2xl font-sans text-xs text-[#E4ECF2] flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-[#2B5278]/60 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[#2AABEE] flex items-center justify-center text-white font-bold text-xs">
+                    P
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-white">Pulse Bot</span>
+                    <span className="text-[10px] text-[#708499]">bot</span>
+                  </div>
+                </div>
+                <span className="text-[10px] text-[#708499] font-mono">15:42</span>
+              </div>
+
+              <div className="flex flex-col gap-2 leading-relaxed">
+                <div className="font-bold text-sm text-[#FF5C6C] flex items-center gap-1.5">
+                  <span>🚨 Pulse Crash Alert</span>
+                </div>
+
+                <div className="space-y-1 text-[11px] font-mono bg-[#0E1621] p-2.5 rounded border border-[#2B5278]/40">
+                  <div><span className="text-[#708499]">Project:</span> auth-api (<code>production</code>)</div>
+                  <div><span className="text-[#708499]">Error:</span> <span className="text-[#FF5C6C]">TypeError</span></div>
+                  <div><span className="text-[#708499]">Message:</span> Cannot read properties of undefined (reading &apos;sessionToken&apos;)</div>
+                  <div><span className="text-[#708499]">Occurrences:</span> 1</div>
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[11px] font-semibold text-[#00E5FF] mb-0.5">
+                    🧠 AI root cause:
+                  </div>
+                  <p className="text-[#B5C9DC] text-[11px]">
+                    The incoming HTTP request is missing the authorization cookie or headers, causing req.auth to be undefined when reading session properties.
+                  </p>
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[11px] font-semibold text-[#2FD28A] mb-0.5">
+                    💡 Suggested Fix:
+                  </div>
+                  <div className="bg-[#0E1621] p-2 rounded border border-[#2B5278]/40 font-mono text-[11px] text-[#A2D2FF] overflow-x-auto">
+                    <code>const token = req.auth?.sessionToken ?? null;</code>
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-[#2B5278]/40 flex justify-end">
+                  <div className="px-3 py-1.5 rounded bg-[#2B5278]/40 text-[#64B5F6] hover:bg-[#2B5278]/60 font-medium text-[11px] inline-flex items-center gap-1">
+                    View Incident in Pulse Dashboard →
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 5: Features */}
+        <section className="py-20 px-4 max-w-5xl mx-auto w-full">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold tracking-tight text-text">Engineered for production reliability</h2>
+            <p className="text-xs text-muted mt-1">Lightweight observability with zero operational friction</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-cyan/10 border border-cyan/30 text-cyan flex items-center justify-center mb-1">
+                <Layers className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">Incident Deduplication</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Errors with matching normalized stack traces and fingerprints are grouped into single incidents, preventing notification storms.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-violet/10 border border-violet/30 text-violet flex items-center justify-center mb-1">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">AI Diagnosis with Fallback</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                LLM-powered root cause analysis with automatic rule-based fallback guarantees you receive actionable insights within 6 seconds.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-ok/10 border border-ok/30 text-ok flex items-center justify-center mb-1">
+                <Shield className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">Secret Scrubbing</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Bearer tokens, database credentials, API keys, and sensitive authorization cookies are redacted before reaching any AI model.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-info/10 border border-info/30 text-info flex items-center justify-center mb-1">
+                <Terminal className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">One SDK Line for Express</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Plug into Express, Fastify, or plain Node.js in seconds. Unhandled rejections and uncaught exceptions are trapped automatically.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-warning/10 border border-warning/30 text-warning flex items-center justify-center mb-1">
+                <Cpu className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">Zero Runtime Overhead</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Asynchronous event buffering caps at 200 items and drops gracefully on network timeouts without ever stalling your application loop.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface border border-border flex flex-col gap-2">
+              <div className="w-8 h-8 rounded-md bg-cyan/10 border border-cyan/30 text-cyan flex items-center justify-center mb-1">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-semibold text-text">Open Source</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Full transparency. Self-host the ingestion server or use the cloud dashboard with complete control over your telemetry.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Section 6: Footer */}
+      <footer className="border-t border-border bg-surface py-8 px-4">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted">
+          <div className="flex items-center gap-3">
+            <Logo textClassName="text-sm font-semibold" />
+            <span className="text-border">|</span>
+            <span>Built for the Devcenter Hacktober Sprint on Rumpty Cloud</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <Link
+              href="https://github.com/samkiell/Pulse"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-text transition-colors"
+            >
+              GitHub Repository
+            </Link>
+            <Link href="/docs" className="hover:text-text transition-colors">
+              Documentation
+            </Link>
           </div>
         </div>
-      )}
+      </footer>
     </div>
   );
 }
