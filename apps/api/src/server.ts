@@ -8,6 +8,7 @@ import { config, validateProductionConfig } from "./config";
 import { logger } from "./lib/logger";
 import { ingestRouter } from "./routes/ingest";
 import { telegramRouter } from "./routes/telegram";
+import { internalRouter } from "./routes/internal";
 import { inFlightAlerts } from "./services/anomaly";
 import { startRetentionSchedule } from "./services/retention";
 
@@ -88,6 +89,7 @@ app.get("/ready", async (req, res) => {
 // API Routes
 app.use("/api/v1", ingestRouter);
 app.use("/api/v1/telegram", telegramRouter);
+app.use("/internal", internalRouter);
 
 // Attach SDK error middleware if self-monitoring is active
 if (config.pulseSelfApiKey && config.pulseEndpoint) {
