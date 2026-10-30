@@ -121,9 +121,9 @@ export default function NewProjectWizard() {
     }
   };
 
-  const installCommand = `npm install @samkiel/pulse-monitor`;
+  const installCommand = `npm install @samkiel/pulse`;
   const initSnippet = createdProject
-    ? `import pulse from "@samkiel/pulse-monitor";
+    ? `import pulse from "@samkiel/pulse";
 
 pulse.init({
   apiKey: "${createdProject.apiKey}",
