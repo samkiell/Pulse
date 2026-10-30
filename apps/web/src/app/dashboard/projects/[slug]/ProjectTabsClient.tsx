@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Tabs } from "@/components/ui/Tabs";
@@ -29,6 +29,8 @@ import {
   Clock,
   Layers,
   Sparkles,
+  Hash,
+  Smartphone,
 } from "lucide-react";
 
 export interface ProjectData {
@@ -93,10 +95,101 @@ export function ProjectTabsClient({ project }: { project: ProjectData }) {
   const [newRotatedKey, setNewRotatedKey] = useState<string | null>(null);
 
   // Telegram Integration State
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [generatingTelegramToken, setGeneratingTelegramToken] = useState(false);
   const [newTelegramLink, setNewTelegramLink] = useState<string | null>(null);
   const [newTelegramPin, setNewTelegramPin] = useState<string | null>(null);
   const [integrationsList, setIntegrationsList] = useState(project.integrations);
+  const [unlinkDialogOpen, setUnlinkDialogOpen] = useState(false);
+  const [chatToUnlink, setChatToUnlink] = useState<{ id: string; title: string } | null>(null);
+  const [unlinking, setUnlinking] = useState(false);
+
+  const activeTelegram = integrationsList.find((i) => i.chatId && i.consumedAt);
+  const activeIntegrations = integrationsList.filter((i) => i.chatId && i.consumedAt);
+  const pendingIntegration = integrationsList.find((i) => !i.consumedAt);
+  const activeLink = newTelegramLink || pendingIntegration?.deepLink;
+  const activePin = newTelegramPin || pendingIntegration?.linkPin;
+
+  // Poll for Telegram link completion when modal is open or when there is a pending token
+  useEffect(() => {
+    const hasPending = integrationsList.some((i) => !i.consumedAt);
+    if (!connectModalOpen && !hasPending) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.slug}/telegram`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.integrations)) {
+          // Check if any previously unconsumed token is now consumed
+          const newlyLinked = data.integrations.find(
+            (i: any) =>
+              i.consumedAt &&
+              !integrationsList.find((prev) => prev.id === i.id && prev.consumedAt)
+          );
+          setIntegrationsList(data.integrations);
+
+          if (newlyLinked) {
+            toast(`Telegram connected to ${newlyLinked.chatTitle || "chat"}!`, "success");
+            router.refresh();
+          }
+        }
+      } catch {
+        // Silently continue polling
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [connectModalOpen, integrationsList, project.slug, router, toast]);
+
+  // Handle Generate Telegram Link
+  const handleGenerateTelegramLink = async () => {
+    setGeneratingTelegramToken(true);
+    try {
+      const res = await fetch(`/api/projects/${project.slug}/telegram`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to generate token");
+      const data = await res.json();
+      setNewTelegramLink(data.deepLink);
+      setNewTelegramPin(data.linkPin || null);
+      setIntegrationsList((prev) => [data, ...prev]);
+      toast("Fresh Telegram pairing link generated (valid 24h)", "success");
+      return data;
+    } catch (err: any) {
+      toast(err.message || "Failed to generate Telegram token", "error");
+      return null;
+    } finally {
+      setGeneratingTelegramToken(false);
+    }
+  };
+
+  const handleOpenConnectModal = async () => {
+    setConnectModalOpen(true);
+    if (!activeLink) {
+      await handleGenerateTelegramLink();
+    }
+  };
+
+  // Handle Unlink Telegram Chat
+  const handleUnlinkTelegram = async (id: string) => {
+    setUnlinking(true);
+    try {
+      const res = await fetch(`/api/projects/${project.slug}/telegram?id=${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to unlink chat");
+      setIntegrationsList((prev) => prev.filter((i) => i.id !== id));
+      toast("Chat unlinked successfully", "success");
+      setUnlinkDialogOpen(false);
+      setChatToUnlink(null);
+      router.refresh();
+    } catch (err: any) {
+      toast(err.message || "Error unlinking chat", "error");
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   // Settings State
   const [renameInput, setRenameInput] = useState(project.name);
@@ -138,40 +231,6 @@ export function ProjectTabsClient({ project }: { project: ProjectData }) {
       toast(err.message || "Key rotation failed", "error");
     } finally {
       setRotating(false);
-    }
-  };
-
-  // Handle Generate Telegram Link
-  const handleGenerateTelegramLink = async () => {
-    setGeneratingTelegramToken(true);
-    try {
-      const res = await fetch(`/api/projects/${project.slug}/telegram`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Failed to generate token");
-      const data = await res.json();
-      setNewTelegramLink(data.deepLink);
-      setNewTelegramPin(data.linkPin || null);
-      setIntegrationsList((prev) => [data, ...prev]);
-      toast("Fresh Telegram deep link generated (valid 24h)", "success");
-    } catch (err: any) {
-      toast(err.message || "Failed to generate Telegram token", "error");
-    } finally {
-      setGeneratingTelegramToken(false);
-    }
-  };
-
-  // Handle Unlink Telegram Chat
-  const handleUnlinkTelegram = async (id: string) => {
-    try {
-      const res = await fetch(`/api/projects/${project.slug}/telegram?id=${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to unlink chat");
-      setIntegrationsList((prev) => prev.filter((i) => i.id !== id));
-      toast("Chat unlinked successfully", "success");
-    } catch (err: any) {
-      toast(err.message || "Error unlinking chat", "error");
     }
   };
 
@@ -283,17 +342,28 @@ pulse.captureException(new Error("Database connection timeout"), {
             <span>SDK: {project.connectionStatus === "Connected" ? "Active" : project.connectionStatus}</span>
           </Badge>
 
-          {(() => {
-            const activeTelegram = integrationsList.find((i) => i.chatId && i.consumedAt);
-            return (
-              <Badge variant={activeTelegram ? "ok" : "warning"}>
-                <Send className="w-3 h-3 mr-1 text-[#2AABEE]" />
-                <span>
-                  Telegram: {activeTelegram ? (activeTelegram.chatTitle || "Linked") : "Not Linked"}
-                </span>
+          {activeTelegram ? (
+            <Badge variant="ok">
+              <Send className="w-3 h-3 mr-1 text-[#2AABEE]" />
+              <span>Telegram: {activeTelegram.chatTitle || "Linked"}</span>
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Badge variant="warning">
+                <Send className="w-3 h-3 mr-1 text-muted" />
+                <span>Telegram: Not Linked</span>
               </Badge>
-            );
-          })()}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleOpenConnectModal}
+                className="h-6 text-[11px] px-2.5 bg-[#2AABEE]/10 text-[#2AABEE] border-[#2AABEE]/30 hover:bg-[#2AABEE]/20 flex items-center gap-1"
+              >
+                <Send className="w-3 h-3" />
+                <span>Connect Telegram</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -532,6 +602,113 @@ pulse.captureException(new Error("Database connection timeout"), {
       {/* TAB 2: Setup */}
       {activeTab === "setup" && (
         <div className="flex flex-col gap-6 max-w-3xl">
+          {/* Telegram Alert Status / Setup */}
+          {activeTelegram ? (
+            <Card>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-ok/20 text-ok flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-text">Telegram Alerts Connected</h3>
+                      <Badge variant="ok">Live Alerts Active</Badge>
+                    </div>
+                    <p className="text-xs text-muted mt-0.5">
+                      Live notifications sent to <strong className="text-text">{activeTelegram.chatTitle || "Chat"}</strong> ({activeTelegram.chatId}).
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setActiveTab("settings")}
+                  >
+                    Manage in Settings
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <Card className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Send className="w-4 h-4 text-[#2AABEE]" />
+                    <h3 className="text-sm font-semibold text-text">Telegram Alert Notifications</h3>
+                    <Badge variant="warning">Not Connected</Badge>
+                  </div>
+                  <p className="text-xs text-muted mt-1 leading-relaxed">
+                    Link Telegram to receive instant incident crash alerts and AI root-cause analysis on mobile or desktop.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleOpenConnectModal}
+                  className="shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Connect Telegram</span>
+                </Button>
+              </div>
+
+              {/* Quick pairing block if link exists */}
+              {activeLink && (
+                <div className="p-4 rounded-lg bg-surface-2 border border-border flex flex-col sm:flex-row items-center gap-5">
+                  <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    <QRCodeView text={activeLink} size={110} />
+                    <span className="text-[10px] text-muted flex items-center gap-1">
+                      <Smartphone className="w-3 h-3 text-[#2AABEE]" />
+                      <span>Scan with phone</span>
+                    </span>
+                  </div>
+
+                  <div className="hidden sm:flex flex-col items-center justify-center self-stretch py-2">
+                    <div className="w-px flex-1 bg-border" />
+                    <span className="text-[10px] text-muted uppercase font-bold py-1">OR</span>
+                    <div className="w-px flex-1 bg-border" />
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-3 w-full">
+                    {activePin && (
+                      <div className="p-2.5 rounded bg-surface border border-border flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-muted tracking-wider flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-cyan" />
+                            <span>6-Digit Pairing PIN</span>
+                          </span>
+                          <div className="text-base font-mono font-bold text-cyan tracking-widest mt-0.5">
+                            {activePin.slice(0, 3)} {activePin.slice(3)}
+                          </div>
+                          <p className="text-[10px] text-muted mt-0.5">
+                            Send <code>/link {activePin}</code> to @{project.botUsername}
+                          </p>
+                        </div>
+                        <CopyButton text={activePin} label="Copy PIN" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white font-medium text-xs transition-colors"
+                      >
+                        <span>Open Telegram</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <CopyButton text={activeLink} label="Copy Link" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Active Key Display */}
           <Card>
             <CardHeader
@@ -716,7 +893,13 @@ pulse.captureException(new Error("Database connection timeout"), {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleUnlinkTelegram(chat.id)}
+                        onClick={() => {
+                          setChatToUnlink({
+                            id: chat.id,
+                            title: chat.chatTitle || (chat.chatId ? `Chat ${chat.chatId}` : "Pending Token"),
+                          });
+                          setUnlinkDialogOpen(true);
+                        }}
                         className="text-critical hover:bg-critical/10"
                       >
                         Unlink
@@ -758,6 +941,96 @@ pulse.captureException(new Error("Database connection timeout"), {
                 </Button>
               </div>
             </form>
+          </Card>
+
+          {/* Telegram Notifications Integration */}
+          <Card>
+            <CardHeader
+              title="Telegram Notifications"
+              description="Manage the Telegram chats receiving instant runtime crash notifications."
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleOpenConnectModal}
+                  className="flex items-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5 text-[#2AABEE]" />
+                  <span>{activeIntegrations.length > 0 ? "Link another chat" : "Connect Telegram"}</span>
+                </Button>
+              }
+            />
+
+            {activeIntegrations.length === 0 ? (
+              <div className="p-5 rounded-md bg-surface-2 border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-surface text-muted flex items-center justify-center shrink-0 border border-border">
+                    <Send className="w-4 h-4 text-muted" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-text">No Telegram chat connected</span>
+                    <p className="text-xs text-muted mt-0.5">
+                      Connect your personal chat or developer group to receive instant incident notifications and AI diagnoses.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleOpenConnectModal}
+                  className="shrink-0"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Connect Telegram</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border border border-border rounded-md overflow-hidden bg-surface">
+                {activeIntegrations.map((chat) => (
+                  <div
+                    key={chat.id}
+                    className="flex items-center justify-between p-4 text-xs gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-[#2AABEE]/15 text-[#2AABEE] flex items-center justify-center shrink-0">
+                        <Send className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-text truncate">
+                          {chat.chatTitle || `Chat ${chat.chatId}`}
+                        </span>
+                        <span className="text-[11px] font-mono text-muted">
+                          {chat.consumedAt ? (
+                            <>Linked <RelativeTime date={chat.consumedAt} /></>
+                          ) : (
+                            "Active"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <Badge variant="ok">Active</Badge>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => {
+                          setChatToUnlink({
+                            id: chat.id,
+                            title: chat.chatTitle || `Chat ${chat.chatId}`,
+                          });
+                          setUnlinkDialogOpen(true);
+                        }}
+                        className="flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Unlink</span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           {/* Delete Project */}
@@ -814,6 +1087,161 @@ pulse.captureException(new Error("Database connection timeout"), {
         onCancel={() => setDeleteDialogOpen(false)}
         isLoading={deleting}
       />
+
+      {/* Unlink Telegram Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={unlinkDialogOpen}
+        title="Unlink Telegram Alerts"
+        description={`Are you sure you want to disconnect Telegram alerts for "${chatToUnlink?.title}"? This chat will stop receiving real-time crash notifications.`}
+        confirmText="Unlink Chat"
+        confirmVariant="danger"
+        isLoading={unlinking}
+        onConfirm={() => {
+          if (chatToUnlink) {
+            handleUnlinkTelegram(chatToUnlink.id);
+          }
+        }}
+        onCancel={() => {
+          setUnlinkDialogOpen(false);
+          setChatToUnlink(null);
+        }}
+      />
+
+      {/* Connect Telegram Modal Dialog */}
+      {connectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bg/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-surface border border-border rounded-lg max-w-lg w-full p-6 shadow-2xl flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#2AABEE]/20 text-[#2AABEE] flex items-center justify-center">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-text">Connect Telegram Alerts</h3>
+                  <p className="text-xs text-muted">Receive live crash alerts and AI diagnoses from @{project.botUsername}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setConnectModalOpen(false)}
+                className="text-muted hover:text-text text-sm p-1 rounded-md transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {activeTelegram ? (
+              <div className="p-4 rounded-lg bg-ok/10 border border-ok/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-ok/20 text-ok flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-ok">Telegram Alerts Connected!</span>
+                    <p className="text-xs text-muted mt-0.5">
+                      Linked to: <strong className="text-text">{activeTelegram.chatTitle || "Chat"}</strong> ({activeTelegram.chatId})
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="ok">Live Alerts Active</Badge>
+              </div>
+            ) : activeLink ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#2AABEE] opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2AABEE]" />
+                    </span>
+                    <span className="text-xs font-medium text-text">Waiting for connection in Telegram...</span>
+                  </div>
+                  <span className="text-[11px] text-muted font-mono">Live Sync</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-lg bg-surface-2 border border-border">
+                  {/* QR Code */}
+                  <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    <QRCodeView text={activeLink} size={120} />
+                    <span className="text-[10px] text-muted flex items-center gap-1">
+                      <Smartphone className="w-3 h-3 text-[#2AABEE]" />
+                      <span>Scan with phone</span>
+                    </span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="hidden sm:flex flex-col items-center justify-center self-stretch py-2">
+                    <div className="w-px flex-1 bg-border" />
+                    <span className="text-[10px] text-muted uppercase font-bold py-1">OR</span>
+                    <div className="w-px flex-1 bg-border" />
+                  </div>
+
+                  {/* PIN & Button */}
+                  <div className="flex-1 flex flex-col gap-3 w-full">
+                    {activePin && (
+                      <div className="p-2.5 rounded bg-surface border border-border flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-muted tracking-wider flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-cyan" />
+                            <span>6-Digit PIN</span>
+                          </span>
+                          <div className="text-base font-mono font-bold text-cyan tracking-widest mt-0.5">
+                            {activePin.slice(0, 3)} {activePin.slice(3)}
+                          </div>
+                          <p className="text-[10px] text-muted mt-0.5">
+                            Send <code>/link {activePin}</code> to @{project.botUsername}
+                          </p>
+                        </div>
+                        <CopyButton text={activePin} label="Copy PIN" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md bg-[#2AABEE] hover:bg-[#2AABEE]/90 text-white font-medium text-xs transition-colors"
+                      >
+                        <span>Open Telegram</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <CopyButton text={activeLink} label="Copy Link" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 gap-3">
+                <RotateCw className="w-5 h-5 animate-spin text-muted" />
+                <span className="text-xs text-muted">Generating fresh Telegram pairing credentials...</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              {activeLink && !activeTelegram && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerateTelegramLink}
+                  isLoading={generatingTelegramToken}
+                  className="text-xs text-muted"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  <span>Generate New Link</span>
+                </Button>
+              )}
+              <div className="ml-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConnectModalOpen(false)}
+                >
+                  {activeTelegram ? "Done" : "Close"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
