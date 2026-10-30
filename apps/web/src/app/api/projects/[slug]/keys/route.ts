@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
 import { createHash, randomBytes } from "node:crypto";
+import { requireApiUser, getOwnedProject } from "@/lib/auth-helpers";
 
 function hashKey(key: string): string {
   return createHash("sha256").update(key).digest("hex");
@@ -11,12 +12,11 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const { slug } = await params;
+    const { user, unauthorizedResponse } = await requireApiUser();
+    if (unauthorizedResponse) return unauthorizedResponse;
 
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
+    const { slug } = await params;
+    const project = await getOwnedProject(user.id, slug);
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
