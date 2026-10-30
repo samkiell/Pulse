@@ -84,20 +84,28 @@ export async function sendTelegramMessage(
   // Truncate to Telegram's 4096 character limit
   const truncatedText = text.length > 4096 ? text.slice(0, 4093) + "..." : text;
 
-  const makeRequest = async () => {
+  const makeRequest = async (useHtml = true) => {
+    const payload: Record<string, any> = {
+      chat_id: chatId,
+      text: truncatedText,
+      disable_web_page_preview: true,
+    };
+    if (useHtml) {
+      payload.parse_mode = "HTML";
+    }
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: truncatedText,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
+      body: JSON.stringify(payload),
     });
   };
 
-  let response = await makeRequest();
+  let response = await makeRequest(true);
+
+  // If HTML entity parsing fails (400), fall back to plain text delivery
+  if (response.status === 400) {
+    response = await makeRequest(false);
+  }
 
   // If rate limited (429), wait retry_after seconds once, then give up
   if (response.status === 429) {
@@ -105,7 +113,10 @@ export async function sendTelegramMessage(
       const data = (await response.json()) as any;
       const retryAfter = data?.parameters?.retry_after || 1;
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      response = await makeRequest();
+      response = await makeRequest(true);
+      if (response.status === 400) {
+        response = await makeRequest(false);
+      }
     } catch {
       return;
     }
@@ -146,7 +157,7 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
     if (!token) {
       await sendTelegramMessage(
         chatId,
-        `Welcome to Pulse Monitor.\n\nTo link your chat to a project, open your Pulse Dashboard, click Connect Telegram to generate a link token, then send /start <token>.`
+        `Welcome to <b>Pulse Monitor</b>.\n\nTo link this chat to a project:\n1. Open your Pulse Dashboard\n2. Navigate to your Project &gt; Telegram Bot tab\n3. Click <b>Connect Telegram Bot</b> or run:\n<code>/start &lt;token&gt;</code>`
       );
       return;
     }
@@ -159,7 +170,7 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
     if (!integration) {
       await sendTelegramMessage(
         chatId,
-        `Invalid token. Please generate a new link token from your Pulse dashboard.`
+        `Invalid token. Please generate a new connection token from your Pulse dashboard.`
       );
       return;
     }
@@ -245,13 +256,16 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
   if (text === "/help") {
     await sendTelegramMessage(
       chatId,
-      `Pulse Bot Commands:
-/status - View active project subscriptions
-/stop - Stop receiving alerts for this chat
-/help - Show available commands`
+      `Pulse Bot Commands:\n/status - View active project subscriptions\n/stop - Stop receiving alerts for this chat\n/help - Show available commands`
     );
     return;
   }
+
+  // Fallback for any other message (e.g. greetings or unrecognized text)
+  await sendTelegramMessage(
+    chatId,
+    `Pulse Monitor is active.\n\nAvailable commands:\n• /status: View active project subscriptions\n• /stop: Stop receiving alerts for this chat\n• /help: Show command help\n\nTo link this chat to a project, open your Pulse Dashboard and send <code>/start &lt;token&gt;</code>.`
+  );
 }
 
 function escapeHtml(text: string): string {
