@@ -11,12 +11,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy monorepo configuration and package manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/db/package.json ./packages/db/
+COPY packages/db/prisma ./packages/db/prisma/
 COPY packages/sdk/package.json ./packages/sdk/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
 # Install dependencies across all workspace packages
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile=false --ignore-scripts
 
 # Copy source trees
 COPY packages/db ./packages/db
