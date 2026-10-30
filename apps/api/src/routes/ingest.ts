@@ -119,8 +119,9 @@ ingestRouter.post(
         parsed.data.events
       );
 
-      res.status(202).json({
+      res.status(200).json({
         success: true,
+        processed: parsed.data.events.length,
         ingestedCount: parsed.data.events.length,
         projectId: apiKeyRecord.projectId,
       });
