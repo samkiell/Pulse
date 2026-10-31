@@ -360,25 +360,38 @@ export function generateRuleBasedDiagnosis(
   };
 }
 
-export const PULSE_AI_CHAT_SYSTEM_PROMPT = `You are Pulse, an elite runtime observability assistant built by SAMKIEL (samkiel.dev).
-You help developers monitor crashes, troubleshoot bugs, and understand system errors.
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
-CRITICAL STYLE & TONE RULES:
-- Talk like a sharp senior engineer texting: direct, casual, smart, and punchy.
+export const PULSE_AI_CHAT_SYSTEM_PROMPT = `You are Pulse, an intelligent runtime observability assistant and crash debugger.
+You run on Rumpty Cloud infrastructure (rumptycloud.com) and were built by SAMKIEL (samkiel.dev).
+
+CRITICAL KNOWLEDGE:
+- What you are: Pulse, real-time error monitor and AI crash diagnostician for developers.
+- Creator & Developer: SAMKIEL (samkiel.dev, Samuel Ezekiel), a full-stack engineer and tech founder.
+- Infrastructure & AI Platform: Powered by Rumpty Cloud (rumptycloud.com) using Rumpty AI inference with LLaMA models.
+- Tech Stack: Built with Node.js, Express, Next.js, TypeScript, PostgreSQL, and Prisma.
+
+STYLE & CONVERSATIONAL RULES:
+- Talk like a sharp, witty senior software engineer texting in Telegram: conversational, casual, direct, and helpful.
+- Be genuinely conversational: reply contextually to what the user actually said instead of repeating generic scripted templates.
+- STRAIGHT TO THE POINT: Keep replies to 1 to 3 punchy sentences (under 280 characters). Never output long essays, lists, or filler.
+- Mention Rumpty Cloud or Rumpty AI when asked about your infrastructure, hosting, models, or what you are built on.
+- Credit SAMKIEL (samkiel.dev) when asked who made you or who built you.
 - NEVER use em dashes (—) or en dashes (–). Use standard commas, periods, or simple hyphens (-) instead.
-- KEEP REPLIES SHORT: Maximum 1 to 2 short sentences (under 240 characters). Never output long paragraphs or textbook lectures.
-- No robotic apologies ("I apologize for the inconvenience", "As an AI...").
-- If the user greets (yo, hi, hey, beans): reply naturally like a homie: "yo! pulse is listening. what are we debugging today?"
-- If asked who made you or about Pulse: "built by SAMKIEL (samkiel.dev) to catch runtime crashes before users notice."
-- If asked about an error or project: pinpoint the exact issue in 1 sentence with a 1-line fix.
-- Formatting: Use simple Telegram HTML (<b>bold</b>, <code>code</code>) sparingly. Never use markdown code blocks or bulleted lists.`;
+- If the user greets or jokes, be friendly and talk back like a homie.
+- If asked about an error or project, diagnose the issue crisply with a direct fix.
+- Formatting: Plain text or minimal Telegram HTML (<b>bold</b>, <code>code</code>) when citing code or commands. No markdown code blocks.`;
 
 /**
  * Queries Rumpty AI chat completions for conversational interactions in Telegram or dashboard.
  */
 export async function queryRumptyAiChat(
   userPrompt: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  history?: ChatHistoryMessage[]
 ): Promise<string> {
   const endpoint = config.rumptyAiEndpoint || "https://chat.rumptycloud.com/v1/chat/completions";
   const apiKey = config.rumptyAiApiKey;
@@ -391,6 +404,21 @@ export async function queryRumptyAiChat(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 25000);
 
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    {
+      role: "system",
+      content: systemPrompt || PULSE_AI_CHAT_SYSTEM_PROMPT,
+    },
+    ...(history || []).map((h) => ({
+      role: h.role,
+      content: h.content,
+    })),
+    {
+      role: "user",
+      content: userPrompt,
+    },
+  ];
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -400,18 +428,9 @@ export async function queryRumptyAiChat(
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt || PULSE_AI_CHAT_SYSTEM_PROMPT,
-          },
-          {
-            role: "user",
-            content: userPrompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 120,
+        messages,
+        temperature: 0.65,
+        max_tokens: 160,
       }),
       signal: controller.signal,
     });

@@ -1,6 +1,34 @@
 import { prisma } from "@pulse/db";
 import { config } from "../config";
-import { queryRumptyAiChat, PULSE_AI_CHAT_SYSTEM_PROMPT } from "./ai";
+import {
+  queryRumptyAiChat,
+  PULSE_AI_CHAT_SYSTEM_PROMPT,
+  type ChatHistoryMessage,
+} from "./ai";
+
+interface RecentTurn {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
+// In-memory rolling history: chatId -> last 6 messages (TTL 15 minutes)
+const chatHistories = new Map<string, RecentTurn[]>();
+
+function getChatHistory(chatId: string): ChatHistoryMessage[] {
+  const now = Date.now();
+  const list = chatHistories.get(chatId) || [];
+  const valid = list.filter((m) => now - m.timestamp < 15 * 60 * 1000);
+  chatHistories.set(chatId, valid);
+  return valid.slice(-6).map((m) => ({ role: m.role, content: m.content }));
+}
+
+function recordChatMessage(chatId: string, role: "user" | "assistant", content: string): void {
+  const list = chatHistories.get(chatId) || [];
+  list.push({ role, content, timestamp: Date.now() });
+  if (list.length > 8) list.shift();
+  chatHistories.set(chatId, list);
+}
 
 export const PULSE_BOT_COMMANDS = [
   { command: "status", description: "View active projects & system health" },
@@ -554,8 +582,12 @@ You can chat with me directly! Send any question about your errors, bugs, or sys
     systemPrompt += `\n\nUser's linked projects context:\n${contextLines.join("\n\n")}`;
   }
 
+  const history = getChatHistory(chatId);
+
   try {
-    const aiReply = await queryRumptyAiChat(text, systemPrompt);
+    const aiReply = await queryRumptyAiChat(text, systemPrompt, history);
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", aiReply);
     await sendTelegramMessage(chatId, aiReply);
   } catch (err: any) {
     logger.error("Failed to generate or deliver AI reply to Telegram", {
