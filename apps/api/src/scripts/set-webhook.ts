@@ -4,8 +4,11 @@ import { registerTelegramCommands } from "../services/telegram";
 async function main() {
   const token = config.telegramBotToken;
   const secret = config.telegramWebhookSecret;
-  const targetUrl = process.argv[2] || process.env.PUBLIC_API_URL || config.publicApiUrl;
-  const publicApiUrl = targetUrl.replace(/\/$/, "");
+  const rawTarget = process.argv[2] || process.env.PUBLIC_API_URL || config.publicApiUrl;
+  const targetWithProto = rawTarget.startsWith("http://") || rawTarget.startsWith("https://")
+    ? rawTarget
+    : `https://${rawTarget}`;
+  const publicApiUrl = targetWithProto.replace(/\/$/, "");
   const base = (config.telegramApiBase || "https://api.telegram.org").replace(/\/$/, "");
 
   if (!token) {
