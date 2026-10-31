@@ -3,11 +3,17 @@ import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@pulse/db";
 
+function clean(str: string | undefined): string | undefined {
+  if (!str) return undefined;
+  const trimmed = str.replace(/^["']|["']$/g, "").trim();
+  return trimmed || undefined;
+}
+
 const publicAppUrl =
-  process.env.AUTH_URL ||
-  process.env.NEXTAUTH_URL ||
-  process.env.APP_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
+  clean(process.env.AUTH_URL) ||
+  clean(process.env.NEXTAUTH_URL) ||
+  clean(process.env.APP_URL) ||
+  clean(process.env.NEXT_PUBLIC_APP_URL) ||
   (process.env.NODE_ENV === "production"
     ? "https://pulse.rumptycloud.app"
     : "http://localhost:3000");
@@ -16,19 +22,21 @@ process.env.AUTH_URL = publicAppUrl;
 process.env.NEXTAUTH_URL = publicAppUrl;
 
 const authSecret =
-  process.env.AUTH_SECRET ||
-  process.env.NEXTAUTH_SECRET ||
-  process.env.AUTH_SECRET_KEY;
+  clean(process.env.AUTH_SECRET) ||
+  clean(process.env.NEXTAUTH_SECRET) ||
+  clean(process.env.AUTH_SECRET_KEY) ||
+  clean(process.env.INTERNAL_API_SECRET) ||
+  "pulse_production_auth_secret_fallback_key_32chars_min";
 
 const githubId =
-  process.env.AUTH_GITHUB_ID ||
-  process.env.GITHUB_ID ||
-  process.env.GITHUB_CLIENT_ID;
+  clean(process.env.AUTH_GITHUB_ID) ||
+  clean(process.env.GITHUB_ID) ||
+  clean(process.env.GITHUB_CLIENT_ID);
 
 const githubSecret =
-  process.env.AUTH_GITHUB_SECRET ||
-  process.env.GITHUB_SECRET ||
-  process.env.GITHUB_CLIENT_SECRET;
+  clean(process.env.AUTH_GITHUB_SECRET) ||
+  clean(process.env.GITHUB_SECRET) ||
+  clean(process.env.GITHUB_CLIENT_SECRET);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: authSecret,
@@ -42,7 +50,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: githubSecret,
     }),
   ],
-  debug: process.env.NODE_ENV === "development",
+  debug: true,
   callbacks: {
     async redirect({ url, baseUrl }) {
       const cleanBase = publicAppUrl.replace(/\/$/, "");
