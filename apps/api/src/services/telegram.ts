@@ -322,7 +322,7 @@ This chat is now subscribed to live crash alerts and AI root-cause diagnosis.
   }
 
   // 2. Handle /start without token
-  if (text === "/start" || text.startsWith("/start ")) {
+  if (text === "/start" || text.startsWith("/start ") || text.toLowerCase() === "start") {
     await sendTelegramMessage(
       chatId,
       `👋 <b>Pulse Monitor</b>
@@ -341,20 +341,24 @@ Real-time runtime error observability & AI diagnosis.
 
 <i>To link a project, send your 6-digit PIN from the Pulse Dashboard.</i>`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", "Sent Pulse Monitor welcome guide and quick commands.");
     return;
   }
 
   // 3. Handle /link without arguments
-  if (text === "/link") {
+  if (text === "/link" || text.toLowerCase() === "link") {
     await sendTelegramMessage(
       chatId,
       `🔗 <b>Link Project to Chat</b>\n\nSend <code>/link &lt;6-digit-PIN&gt;</code> (e.g. <code>/link 482195</code>) using the PIN shown on your Pulse Dashboard.`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", "Prompted user for 6-digit PIN to link project.");
     return;
   }
 
   // 4. Handle /status
-  if (text === "/status") {
+  if (text === "/status" || /^(status|health|\/health)$/i.test(text.trim())) {
     const linked = await prisma.telegramIntegration.findMany({
       where: { chatId },
       include: {
@@ -374,6 +378,8 @@ Real-time runtime error observability & AI diagnosis.
         chatId,
         `This chat is not currently linked to any Pulse projects.\n\nSend <code>/link &lt;pin&gt;</code> with your 6-digit PIN from the Pulse dashboard to connect.`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", "No projects linked to this chat.");
       return;
     }
 
@@ -397,11 +403,16 @@ ${projectSummary}
 
 <i>Send /latest to inspect the most recent crash.</i>`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", `Pulse Status: ${activeCount} of ${linked.length} active subscriptions.`);
     return;
   }
 
   // 5. Handle /latest
-  if (text === "/latest") {
+  if (
+    text === "/latest" ||
+    /^(latest|last\s+crash|last\s+error|recent\s+error|latest\s+error)$/i.test(text.trim())
+  ) {
     const linked = await prisma.telegramIntegration.findMany({
       where: { chatId, isActive: true },
       select: { projectId: true },
@@ -412,6 +423,8 @@ ${projectSummary}
         chatId,
         `No active project linked to this chat. Send <code>/link &lt;pin&gt;</code> to connect.`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", "No active projects linked to this chat.");
       return;
     }
 
@@ -427,6 +440,8 @@ ${projectSummary}
         chatId,
         `✅ <b>All systems normal!</b>\n\nNo crash incidents recorded yet for your linked projects.`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", "No crash incidents recorded yet for linked projects.");
       return;
     }
 
@@ -446,6 +461,8 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
 🔗 <a href="${incidentUrl}">View in Pulse Dashboard</a>`;
 
     await sendTelegramMessage(chatId, msg);
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", `Showed latest incident in ${latestIncident.project.name}: ${latestIncident.title}`);
     return;
   }
 
@@ -486,6 +503,12 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
       chatId,
       `📁 <b>Linked Projects (${integrations.length}):</b>\n\n${lines.join("\n\n")}\n\n<i>To disconnect a project, send <code>/unlink &lt;name&gt;</code>.</i>`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(
+      chatId,
+      "assistant",
+      `Listed ${integrations.length} linked projects: ${integrations.map((i) => i.project.name).join(", ")}`
+    );
     return;
   }
 
@@ -507,6 +530,8 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
         chatId,
         `No projects are currently linked to this chat.`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", "No projects currently linked to this chat.");
       return;
     }
 
@@ -518,6 +543,8 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
         chatId,
         `🗑️ <b>Unlink Project</b>\n\nSpecify which project to disconnect:\n${projectList}\n\n<i>Or send <code>/unlink all</code> to remove all.</i>`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", "Prompted user with list of projects to unlink.");
       return;
     }
 
@@ -529,6 +556,8 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
         chatId,
         `🗑️ <b>All Projects Unlinked</b>\n\nDisconnected ${deleted.count} project subscription(s) from this chat.`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", `Unlinked all ${deleted.count} project(s) from this chat.`);
       return;
     }
 
@@ -549,6 +578,8 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
         chatId,
         `Project "<b>${escapeHtml(target)}</b>" is not linked to this chat.\n\nCurrently linked projects:\n${projectList}`
       );
+      recordChatMessage(chatId, "user", text);
+      recordChatMessage(chatId, "assistant", `Project ${target} is not linked to this chat.`);
       return;
     }
 
@@ -563,11 +594,17 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
       chatId,
       `🗑️ <b>Project Unlinked</b>\n━━━━━━━━━━━━━━━━━━\nProject <b>${escapeHtml(match.project.name)}</b> has been disconnected from this chat. You will no longer receive crash alerts for it.`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", `Unlinked project ${match.project.name} from this chat.`);
     return;
   }
 
-  // 7. Handle /stop or /mute
-  if (text === "/stop" || text === "/mute") {
+  // 8. Handle /stop or /mute
+  if (
+    text === "/stop" ||
+    text === "/mute" ||
+    /^(stop|mute|pause|stop\s+alerts|mute\s+alerts|pause\s+alerts)$/i.test(text.trim())
+  ) {
     const result = await prisma.telegramIntegration.updateMany({
       where: { chatId, isActive: true },
       data: { isActive: false },
@@ -581,11 +618,16 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
     } else {
       await sendTelegramMessage(chatId, `No active project subscriptions found for this chat.`);
     }
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", `Alert notifications paused for ${result.count} project(s).`);
     return;
   }
 
-  // 8. Handle /resume
-  if (text === "/resume") {
+  // 9. Handle /resume
+  if (
+    text === "/resume" ||
+    /^(resume|unmute|resume\s+alerts|unmute\s+alerts)$/i.test(text.trim())
+  ) {
     const result = await prisma.telegramIntegration.updateMany({
       where: { chatId, isActive: false },
       data: { isActive: true },
@@ -602,11 +644,18 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
         `Alerts are already active for all linked projects in this chat.`
       );
     }
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(chatId, "assistant", `Alert notifications resumed for ${result.count} project(s).`);
     return;
   }
 
-  // 9. Handle /help
-  if (text === "/help") {
+  // 10. Handle /help or natural "help", "commands", "menu"
+  if (
+    text === "/help" ||
+    /^(help|commands|\/commands|menu|\/menu|options|\/options|how\s+to\s+use|what\s+can\s+you\s+do)$/i.test(
+      text.trim()
+    )
+  ) {
     await sendTelegramMessage(
       chatId,
       `🤖 <b>Pulse Bot Commands:</b>
@@ -615,6 +664,7 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
 • <code>/latest</code> - View most recent error & AI diagnosis
 • <code>/projects</code> - List all projects linked to this chat
 • <code>/link &lt;pin&gt;</code> - Link project using 6-digit PIN
+• <code>/unlink &lt;name&gt;</code> - Disconnect a project from this chat
 • <code>/stop</code> - Pause alerts for this chat
 • <code>/resume</code> - Resume alerts for this chat
 • <code>/help</code> - Show this command menu
@@ -622,10 +672,16 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
 💬 <b>AI Chat Assistant:</b>
 You can chat with me directly! Send any question about your errors, bugs, or system health.`
     );
+    recordChatMessage(chatId, "user", text);
+    recordChatMessage(
+      chatId,
+      "assistant",
+      "Displayed Pulse Bot command list (/status, /latest, /projects, /link, /unlink, /stop, /resume, /help)."
+    );
     return;
   }
 
-  // 10. Conversational AI Chat via Rumpty AI
+  // 11. Conversational AI Chat via Rumpty AI
   void sendTelegramChatAction(chatId, "typing");
 
   const linked = await prisma.telegramIntegration.findMany({
@@ -664,6 +720,7 @@ You can chat with me directly! Send any question about your errors, bugs, or sys
       return `Project "${item.project.name}":\n${incidentsList || "All systems green."}`;
     });
     systemPrompt += `\n\nUser's linked projects context:\n${contextLines.join("\n\n")}`;
+    systemPrompt += `\nNOTE: Only discuss these errors if the user explicitly asks about errors, crashes, bugs, or project issues. If the user is chatting, asking questions, or discussing other topics, respond directly to what they asked without bringing up errors unprompted.`;
   }
 
   const history = getChatHistory(chatId);
