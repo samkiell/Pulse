@@ -62,7 +62,15 @@ services:
       INTERNAL_API_URL: http://api:3001
       DASHBOARD_USER: ${DASHBOARD_USER:-admin}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-pulse_production_password_change_me}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      APP_URL: ${APP_URL:-https://pulse.rumptycloud.app}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-${APP_URL:-https://pulse.rumptycloud.app}}
+      AUTH_URL: ${AUTH_URL:-${APP_URL:-https://pulse.rumptycloud.app}}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-${AUTH_URL:-${APP_URL:-https://pulse.rumptycloud.app}}}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-${AUTH_SECRET:-}}
+      AUTH_GITHUB_ID: ${AUTH_GITHUB_ID:-}
+      AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET:-}
+      AUTH_TRUST_HOST: "true"
     depends_on:
       postgres:
         condition: service_healthy
