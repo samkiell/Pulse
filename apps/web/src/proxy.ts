@@ -15,10 +15,11 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Health, Auth, and v1 Ingest/Telegram API proxy routes are strictly public (authenticated via API keys / webhook tokens)
+  // 2. Health, Auth, DB init, and v1 Ingest/Telegram API proxy routes are strictly public
   if (
     pathname === "/api/health" ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/db") ||
     pathname.startsWith("/api/v1")
   ) {
     return NextResponse.next();

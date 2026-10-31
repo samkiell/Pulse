@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
+import { runSchemaBootstrap } from "../db/init/route";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,7 @@ export async function GET() {
   let dbStatus = "unknown";
   let dbError: string | null = null;
   let userCount = 0;
+  let autoBootstrapped = false;
 
   try {
     userCount = await prisma.user.count();
@@ -14,6 +16,21 @@ export async function GET() {
   } catch (err: any) {
     dbStatus = "error";
     dbError = err?.message || String(err);
+
+    // If tables are missing, automatically bootstrap schema
+    if (dbError && (dbError.includes("does not exist") || dbError.includes("relation"))) {
+      try {
+        const boot = await runSchemaBootstrap();
+        if (boot.success) {
+          dbStatus = "connected";
+          userCount = boot.userCount;
+          dbError = null;
+          autoBootstrapped = true;
+        }
+      } catch (bootErr: any) {
+        dbError = `Bootstrap failed: ${bootErr?.message || bootErr}`;
+      }
+    }
   }
 
   const clean = (s?: string) => Boolean(s?.replace(/^["']|["']$/g, "").trim());
@@ -24,6 +41,7 @@ export async function GET() {
     database: {
       status: dbStatus,
       userCount,
+      autoBootstrapped,
       error: dbError,
     },
     auth: {
