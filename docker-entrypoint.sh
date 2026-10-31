@@ -21,13 +21,7 @@ if [ -n "$DATABASE_URL" ]; then
   echo "[Pulse] Checking database connection and schema migrations..."
   if [ -n "$PRISMA_CLI" ]; then
     echo "[Pulse] Running database migrations with $PRISMA_CLI..."
-    if ! "$PRISMA_CLI" migrate deploy --schema=packages/db/prisma/schema.prisma; then
-      echo "[Pulse] Initial migrate deploy encountered existing unmanaged schema, reconciling baseline..."
-      # If tables exist but _prisma_migrations is uninitialized, baseline migration 1
-      "$PRISMA_CLI" migrate resolve --applied 20261030152103_add_auth_and_ownership --schema=packages/db/prisma/schema.prisma 2>/dev/null || true
-      echo "[Pulse] Re-applying migrations after baseline reconciliation..."
-      "$PRISMA_CLI" migrate deploy --schema=packages/db/prisma/schema.prisma
-    fi
+    "$PRISMA_CLI" migrate deploy --schema=packages/db/prisma/schema.prisma
     echo "[Pulse] Database schema migrations applied successfully."
   else
     echo "[Pulse] ERROR: Local Prisma CLI binary not found. Refusing to download unbundled CLI." >&2

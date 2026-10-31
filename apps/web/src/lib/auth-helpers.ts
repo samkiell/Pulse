@@ -69,6 +69,15 @@ export async function requireUser() {
     console.warn("[Pulse Auth] requireUser: No valid authenticated user session found, redirecting to /login");
     redirect("/login");
   }
+
+  // Self-heal: associate any unowned legacy projects with the authenticated user
+  try {
+    await prisma.$executeRawUnsafe(
+      'UPDATE "Project" SET "ownerId" = $1 WHERE "ownerId" IS NULL',
+      user.id
+    );
+  } catch {}
+
   return user as { id: string; name?: string | null; email?: string | null; image?: string | null };
 }
 

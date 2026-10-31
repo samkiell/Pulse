@@ -178,6 +178,7 @@ export class PulseClient {
               : "node",
           timestamp: new Date().toISOString(),
         }),
+        signal: AbortSignal.timeout(3000),
       });
       return response.ok;
     } catch {
