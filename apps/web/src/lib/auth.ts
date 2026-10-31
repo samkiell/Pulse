@@ -26,7 +26,15 @@ const authSecret =
   clean(process.env.NEXTAUTH_SECRET) ||
   clean(process.env.AUTH_SECRET_KEY) ||
   clean(process.env.INTERNAL_API_SECRET) ||
-  "pulse_production_auth_secret_fallback_key_32chars_min";
+  (process.env.NODE_ENV === "production"
+    ? undefined
+    : "pulse_development_auth_secret_32chars_local");
+
+if (!authSecret && process.env.NODE_ENV === "production") {
+  console.error(
+    "[Pulse Auth] CRITICAL: AUTH_SECRET or NEXTAUTH_SECRET is required in production but unset."
+  );
+}
 
 const githubId =
   clean(process.env.AUTH_GITHUB_ID) ||
@@ -38,6 +46,12 @@ const githubSecret =
   clean(process.env.GITHUB_SECRET) ||
   clean(process.env.GITHUB_CLIENT_SECRET);
 
+if ((!githubId || !githubSecret) && process.env.NODE_ENV === "production") {
+  console.warn(
+    "[Pulse Auth] Notice: AUTH_GITHUB_ID or AUTH_GITHUB_SECRET is unset. GitHub OAuth login will not be operational."
+  );
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: authSecret,
   adapter: PrismaAdapter(prisma),
@@ -45,10 +59,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     strategy: "database",
   },
   providers: [
-    GitHub({
-      clientId: githubId,
-      clientSecret: githubSecret,
-    }),
+    ...(githubId && githubSecret
+      ? [
+          GitHub({
+            clientId: githubId,
+            clientSecret: githubSecret,
+          }),
+        ]
+      : []),
   ],
   debug: true,
   callbacks: {

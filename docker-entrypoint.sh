@@ -6,10 +6,33 @@ if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
 
-# Run database schema synchronization if DATABASE_URL is configured
+# Locate local Prisma CLI without contacting npm registry
+PRISMA_CLI=""
+if [ -x "./node_modules/.bin/prisma" ]; then
+  PRISMA_CLI="./node_modules/.bin/prisma"
+elif [ -x "./packages/db/node_modules/.bin/prisma" ]; then
+  PRISMA_CLI="./packages/db/node_modules/.bin/prisma"
+elif command -v prisma >/dev/null 2>&1; then
+  PRISMA_CLI="prisma"
+fi
+
+# Controlled, observable and non-destructive database deployment migration workflow
 if [ -n "$DATABASE_URL" ]; then
-  echo "[Pulse] Synchronizing database schema..."
-  npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate || true
+  echo "[Pulse] Checking database connection and schema migrations..."
+  if [ -n "$PRISMA_CLI" ]; then
+    echo "[Pulse] Running database migrations with $PRISMA_CLI..."
+    if ! "$PRISMA_CLI" migrate deploy --schema=packages/db/prisma/schema.prisma; then
+      echo "[Pulse] Initial migrate deploy encountered existing unmanaged schema, reconciling baseline..."
+      # If tables exist but _prisma_migrations is uninitialized, baseline migration 1
+      "$PRISMA_CLI" migrate resolve --applied 20261030152103_add_auth_and_ownership --schema=packages/db/prisma/schema.prisma 2>/dev/null || true
+      echo "[Pulse] Re-applying migrations after baseline reconciliation..."
+      "$PRISMA_CLI" migrate deploy --schema=packages/db/prisma/schema.prisma
+    fi
+    echo "[Pulse] Database schema migrations applied successfully."
+  else
+    echo "[Pulse] ERROR: Local Prisma CLI binary not found. Refusing to download unbundled CLI." >&2
+    exit 1
+  fi
 fi
 
 # Automatic service detection based on port or environment flags

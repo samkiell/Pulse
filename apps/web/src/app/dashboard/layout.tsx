@@ -9,23 +9,33 @@ export default async function DashboardLayout({
 }) {
   const user = await requireUser();
 
-  const userProjects = await prisma.project.findMany({
-    where: { ownerId: user.id },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      errorEvents: {
-        orderBy: { timestamp: "desc" },
-        take: 1,
-        select: { timestamp: true },
+  let userProjects: any[] = [];
+  try {
+    userProjects = await prisma.project.findMany({
+      where: { ownerId: user.id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        errorEvents: {
+          orderBy: { timestamp: "desc" },
+          take: 1,
+          select: { timestamp: true },
+        },
+        _count: {
+          select: { errorEvents: true },
+        },
       },
-      _count: {
-        select: { errorEvents: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err: any) {
+    const sanitized = String(err?.message || err).replace(
+      /postgresql:\/\/[^@\s]+@/gi,
+      "postgresql://[REDACTED]@"
+    );
+    console.error("[Dashboard Layout] Failed to load projects for nav:", sanitized);
+    throw err;
+  }
 
   const projectNavItems = userProjects.map((p) => {
     const totalEvents = p._count.errorEvents;

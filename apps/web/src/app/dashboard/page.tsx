@@ -12,28 +12,38 @@ import { FolderKanban, Plus, Send, AlertTriangle, ArrowRight } from "lucide-reac
 export default async function DashboardOverviewPage() {
   const user = await requireUser();
 
-  const projects = await prisma.project.findMany({
-    where: { ownerId: user.id },
-    include: {
-      incidents: {
-        where: { status: "OPEN" },
-        select: { id: true },
+  let projects: any[] = [];
+  try {
+    projects = await prisma.project.findMany({
+      where: { ownerId: user.id },
+      include: {
+        incidents: {
+          where: { status: "OPEN" },
+          select: { id: true },
+        },
+        errorEvents: {
+          orderBy: { timestamp: "desc" },
+          take: 1,
+          select: { timestamp: true },
+        },
+        telegramIntegrations: {
+          where: { isActive: true, consumedAt: { not: null } },
+          select: { id: true },
+        },
+        _count: {
+          select: { errorEvents: true, incidents: true },
+        },
       },
-      errorEvents: {
-        orderBy: { timestamp: "desc" },
-        take: 1,
-        select: { timestamp: true },
-      },
-      telegramIntegrations: {
-        where: { isActive: true, consumedAt: { not: null } },
-        select: { id: true },
-      },
-      _count: {
-        select: { errorEvents: true, incidents: true },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (err: any) {
+    const sanitized = String(err?.message || err).replace(
+      /postgresql:\/\/[^@\s]+@/gi,
+      "postgresql://[REDACTED]@"
+    );
+    console.error("[Dashboard Page] Failed to query user projects:", sanitized);
+    throw err;
+  }
 
   const projectCards = projects.map((p) => {
     const totalEvents = p._count.errorEvents;

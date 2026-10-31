@@ -34,12 +34,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV HOME=/home/nodejs
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system --gid 1001 nodejs && \
-    useradd --system --uid 1001 -g nodejs nodejs
+    useradd --system --uid 1001 -m -d /home/nodejs -g nodejs nodejs && \
+    mkdir -p /home/nodejs && chown -R nodejs:nodejs /home/nodejs
 
 # Copy standalone output and static assets
 COPY --from=builder --chown=nodejs:nodejs /app/apps/web/.next/standalone ./

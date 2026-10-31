@@ -47,13 +47,26 @@ export function generateProjectSlug(name: string): string {
 }
 
 export async function getCurrentUser() {
-  const session = await auth();
-  return session?.user || null;
+  try {
+    const session = await auth();
+    return session?.user || null;
+  } catch (err: any) {
+    if (err?.digest === "DYNAMIC_SERVER_USAGE" || String(err?.message).includes("Dynamic server usage")) {
+      throw err;
+    }
+    const sanitized = String(err?.message || err).replace(
+      /postgresql:\/\/[^@\s]+@/gi,
+      "postgresql://[REDACTED]@"
+    );
+    console.error("[Pulse Auth] Session retrieval error in getCurrentUser:", sanitized);
+    throw err;
+  }
 }
 
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user || !user.id) {
+    console.warn("[Pulse Auth] requireUser: No valid authenticated user session found, redirecting to /login");
     redirect("/login");
   }
   return user as { id: string; name?: string | null; email?: string | null; image?: string | null };

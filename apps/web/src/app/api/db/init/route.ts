@@ -3,7 +3,7 @@ import { prisma } from "@pulse/db";
 
 export const dynamic = "force-dynamic";
 
-export const DDL_STATEMENTS = [
+const DDL_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL,
     "name" TEXT,
@@ -141,7 +141,7 @@ export const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "ErrorEvent_fingerprint_idx" ON "ErrorEvent"("fingerprint")`,
 ];
 
-export async function runSchemaBootstrap(): Promise<{ success: boolean; userCount: number }> {
+async function runSchemaBootstrap(): Promise<{ success: boolean; userCount: number }> {
   for (const sql of DDL_STATEMENTS) {
     try {
       await prisma.$executeRawUnsafe(sql);
@@ -154,6 +154,26 @@ export async function runSchemaBootstrap(): Promise<{ success: boolean; userCoun
 }
 
 export async function GET() {
+  return NextResponse.json(
+    {
+      error: "Method Not Allowed",
+      message: "Direct schema mutation via GET is disabled. Database migrations are managed via deployment.",
+    },
+    { status: 405 }
+  );
+}
+
+export async function POST(req: Request) {
+  const internalSecret = process.env.INTERNAL_API_SECRET?.trim();
+  const incomingSecret = req.headers.get("x-internal-secret")?.trim();
+
+  if (!internalSecret || incomingSecret !== internalSecret) {
+    return NextResponse.json(
+      { error: "Unauthorized: Invalid or missing X-Internal-Secret header" },
+      { status: 401 }
+    );
+  }
+
   const result = await runSchemaBootstrap();
   return NextResponse.json({
     status: result.success ? "success" : "error",

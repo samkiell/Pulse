@@ -40,12 +40,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV HOSTNAME="0.0.0.0"
+ENV HOME=/home/nodejs
+ENV PATH="/app/node_modules/.bin:/app/packages/db/node_modules/.bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system --gid 1001 nodejs && \
-    useradd --system --uid 1001 -g nodejs nodejs
+    useradd --system --uid 1001 -m -d /home/nodejs -g nodejs nodejs && \
+    mkdir -p /home/nodejs && chown -R nodejs:nodejs /home/nodejs
 
 # Copy root workspace and dependencies for API
 COPY --from=builder --chown=nodejs:nodejs /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./

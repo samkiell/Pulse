@@ -12,11 +12,12 @@
     "typecheck": "pnpm -r run typecheck",
     "db:generate": "pnpm --filter @pulse/db generate",
     "db:migrate": "pnpm --filter @pulse/db migrate",
-    "db:deploy": "pnpm --filter @pulse/db deploy",
+    "db:deploy": "pnpm --filter @pulse/db run deploy",
     "db:push": "pnpm --filter @pulse/db push"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
+    "prisma": "^6.4.1",
     "typescript": "^5.7.3"
   }
 }

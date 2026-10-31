@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@pulse/db";
-import { runSchemaBootstrap } from "../db/init/route";
 
 export const dynamic = "force-dynamic";
 
@@ -8,29 +7,16 @@ export async function GET() {
   let dbStatus = "unknown";
   let dbError: string | null = null;
   let userCount = 0;
-  let autoBootstrapped = false;
 
   try {
+    await prisma.$queryRaw`SELECT 1`;
     userCount = await prisma.user.count();
     dbStatus = "connected";
   } catch (err: any) {
     dbStatus = "error";
-    dbError = err?.message || String(err);
-
-    // If tables are missing, automatically bootstrap schema
-    if (dbError && (dbError.includes("does not exist") || dbError.includes("relation"))) {
-      try {
-        const boot = await runSchemaBootstrap();
-        if (boot.success) {
-          dbStatus = "connected";
-          userCount = boot.userCount;
-          dbError = null;
-          autoBootstrapped = true;
-        }
-      } catch (bootErr: any) {
-        dbError = `Bootstrap failed: ${bootErr?.message || bootErr}`;
-      }
-    }
+    // Sanitize any database connection strings or credentials from the error
+    const rawMsg = err?.message || String(err);
+    dbError = rawMsg.replace(/postgresql:\/\/[^@\s]+@/gi, "postgresql://[REDACTED]@");
   }
 
   const clean = (s?: string) => Boolean(s?.replace(/^["']|["']$/g, "").trim());
@@ -41,7 +27,6 @@ export async function GET() {
     database: {
       status: dbStatus,
       userCount,
-      autoBootstrapped,
       error: dbError,
     },
     auth: {
