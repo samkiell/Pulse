@@ -538,21 +538,32 @@ You can chat with me directly! Send any question about your errors, bugs, or sys
 
   let systemPrompt = PULSE_AI_CHAT_SYSTEM_PROMPT;
 
-  if (linked.length > 0) {
+  const isCasualGreeting = /^(yo|hey|hi|hello|sup|beans|gm|gn)\b/i.test(text);
+
+  if (linked.length > 0 && !isCasualGreeting) {
     const contextLines = linked.map((item) => {
       const incidentsList = item.project.incidents
+        .slice(0, 2)
         .map(
           (inc) =>
-            `- ${inc.title} (${inc.status}, ${inc.occurrenceCount}x): ${inc.aiDiagnosis || "No diagnosis"}`
+            `- ${inc.title.slice(0, 80)} (${inc.status}, ${inc.occurrenceCount}x)`
         )
         .join("\n");
-      return `Project "${item.project.name}":\n${incidentsList || "No recent incidents recorded. All systems green."}`;
+      return `Project "${item.project.name}":\n${incidentsList || "All systems green."}`;
     });
-    systemPrompt += `\n\nUser's linked projects and recent incidents context:\n${contextLines.join("\n\n")}`;
+    systemPrompt += `\n\nUser's linked projects context:\n${contextLines.join("\n\n")}`;
   }
 
-  const aiReply = await queryRumptyAiChat(text, systemPrompt);
-  await sendTelegramMessage(chatId, aiReply);
+  try {
+    const aiReply = await queryRumptyAiChat(text, systemPrompt);
+    await sendTelegramMessage(chatId, aiReply);
+  } catch (err: any) {
+    logger.error("Failed to generate or deliver AI reply to Telegram", {
+      chatId,
+      error: err?.message || String(err),
+    });
+    await sendTelegramMessage(chatId, "pulse is online. what are we debugging?").catch(() => {});
+  }
 }
 
 function escapeHtml(text: string): string {
