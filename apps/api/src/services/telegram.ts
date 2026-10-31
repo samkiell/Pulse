@@ -35,6 +35,7 @@ export const PULSE_BOT_COMMANDS = [
   { command: "latest", description: "View most recent crash & AI diagnosis" },
   { command: "projects", description: "List all connected projects" },
   { command: "link", description: "Link project via 6-digit PIN" },
+  { command: "unlink", description: "Unlink project (e.g. /unlink <name>)" },
   { command: "stop", description: "Pause alert notifications for this chat" },
   { command: "resume", description: "Resume alert notifications" },
   { command: "help", description: "Show commands and guide" },
@@ -330,6 +331,7 @@ Real-time runtime error observability & AI diagnosis.
 
 <b>Quick Commands:</b>
 • <code>/link &lt;pin&gt;</code> - Link a project via 6-digit PIN
+• <code>/unlink &lt;name&gt;</code> - Disconnect a project from this chat
 • <code>/status</code> - View active subscriptions & health
 • <code>/latest</code> - View latest crash & AI diagnosis
 • <code>/projects</code> - List connected projects
@@ -447,8 +449,13 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
     return;
   }
 
-  // 6. Handle /projects
-  if (text === "/projects") {
+  // 6. Handle /projects or natural "list my projects"
+  if (
+    text === "/projects" ||
+    /^(l+ist\s+(?:all\s+)?(?:my\s+)?projects|my\s+projects|show\s+(?:all\s+)?(?:my\s+)?projects|what\s+are\s+my\s+projects|projects)$/i.test(
+      text.trim()
+    )
+  ) {
     const integrations = await prisma.telegramIntegration.findMany({
       where: { chatId },
       include: {
@@ -477,7 +484,84 @@ ${escapeHtml(latestIncident.aiDiagnosis || "Pending diagnosis...")}
 
     await sendTelegramMessage(
       chatId,
-      `📁 <b>Linked Projects (${integrations.length}):</b>\n\n${lines.join("\n\n")}`
+      `📁 <b>Linked Projects (${integrations.length}):</b>\n\n${lines.join("\n\n")}\n\n<i>To disconnect a project, send <code>/unlink &lt;name&gt;</code>.</i>`
+    );
+    return;
+  }
+
+  // 7. Handle /unlink <project> or "unlink <project>"
+  const unlinkMatch = text.match(
+    /^\/?(?:unlink|remove|disconnect)(?:\s+(?:project\s+)?(.+))?$/i
+  );
+  if (unlinkMatch) {
+    const rawTarget = unlinkMatch[1]?.trim();
+    const target = rawTarget?.replace(/^["'«»“”]|["'«»“”]$/g, "").trim();
+
+    const linked = await prisma.telegramIntegration.findMany({
+      where: { chatId },
+      include: { project: true },
+    });
+
+    if (linked.length === 0) {
+      await sendTelegramMessage(
+        chatId,
+        `No projects are currently linked to this chat.`
+      );
+      return;
+    }
+
+    if (!target) {
+      const projectList = linked
+        .map((l) => `• <code>/unlink ${escapeHtml(l.project.name)}</code>`)
+        .join("\n");
+      await sendTelegramMessage(
+        chatId,
+        `🗑️ <b>Unlink Project</b>\n\nSpecify which project to disconnect:\n${projectList}\n\n<i>Or send <code>/unlink all</code> to remove all.</i>`
+      );
+      return;
+    }
+
+    if (target.toLowerCase() === "all") {
+      const deleted = await prisma.telegramIntegration.deleteMany({
+        where: { chatId },
+      });
+      await sendTelegramMessage(
+        chatId,
+        `🗑️ <b>All Projects Unlinked</b>\n\nDisconnected ${deleted.count} project subscription(s) from this chat.`
+      );
+      return;
+    }
+
+    // Match by exact name, slug, or case-insensitive contains
+    const match = linked.find(
+      (l) =>
+        l.project.name.toLowerCase() === target.toLowerCase() ||
+        l.project.slug.toLowerCase() === target.toLowerCase() ||
+        l.project.name.toLowerCase().includes(target.toLowerCase()) ||
+        target.toLowerCase().includes(l.project.name.toLowerCase())
+    );
+
+    if (!match) {
+      const projectList = linked
+        .map((l) => `• <code>${escapeHtml(l.project.name)}</code>`)
+        .join("\n");
+      await sendTelegramMessage(
+        chatId,
+        `Project "<b>${escapeHtml(target)}</b>" is not linked to this chat.\n\nCurrently linked projects:\n${projectList}`
+      );
+      return;
+    }
+
+    await prisma.telegramIntegration.deleteMany({
+      where: {
+        chatId,
+        projectId: match.projectId,
+      },
+    });
+
+    await sendTelegramMessage(
+      chatId,
+      `🗑️ <b>Project Unlinked</b>\n━━━━━━━━━━━━━━━━━━\nProject <b>${escapeHtml(match.project.name)}</b> has been disconnected from this chat. You will no longer receive crash alerts for it.`
     );
     return;
   }
